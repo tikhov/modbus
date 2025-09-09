@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
 
         # Флаг, который принудительно меняет местами ток и напряжение ПРИ ОТОБРАЖЕНИИ
         # (независимо от того, что отдал драйвер). Включён под твой прибор.
-        self._display_swap_iv = True
+        self._display_swap_iv = False
 
         self.power_state = "ready"  # "ready" | "on" | "stop"
 

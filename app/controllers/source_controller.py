@@ -108,7 +108,7 @@ class SourceController(QObject):
                         f"(baud={baudrate}, parity={parity}, stop={stopbits}, data=8)."
                     )
 
-                self.driver = SourceDriver(self.client, unit_id=unit_id, swap_iv=True)
+                self.driver = SourceDriver(self.client, unit_id=unit_id)
 
                 # Быстрый ping (ничего не записывает в прибор)
                 if not self.driver.ping():
@@ -127,7 +127,7 @@ class SourceController(QObject):
                 if not self.client.connect():
                     raise RuntimeError(f"Не удалось подключиться к {host}:{port}.")
 
-                self.driver = SourceDriver(self.client, unit_id=unit_id, swap_iv=True)
+                self.driver = SourceDriver(self.client, unit_id=unit_id)
 
                 if not self.driver.ping():
                     raise RuntimeError(
