@@ -225,6 +225,8 @@ class MainWindow(QMainWindow):
     # измерения/таймер
     def _on_meas(self, meas):
         try:
+            i = int(round(meas.current)); v = int(round(meas.voltage))
+            self.lbl_current.setText(f"{i:d} А"); self.lbl_voltage.setText(f"{v:+d} В".replace("+",""))
             v = float(meas.voltage); i = float(meas.current)
             self.lbl_voltage.setText(f"{v:+.1f} В".replace("+", "").replace(".", ","))
             self.lbl_current.setText(f"{i:.1f} А".replace(".", ","))
