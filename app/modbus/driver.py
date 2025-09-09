@@ -14,25 +14,26 @@ SCALE_V = 1.0
 
 class SourceDriver:
     """
-    Совместимо с разными вариантами pymodbus (2.x / 3.x) и обёртками:
-    - пробуем вызывать методы с unit=..., при TypeError повторяем без unit
-    - ток/напряжение читаем как int16 (поддержка отрицательных значений)
-    - авто-детект свопа I/U и 0/1-базового смещения адреса (+/-1)
-    - А·ч читаем из блока 6 регистров, начиная с ERROR_FLAGS (индексы 4..5)
+    Совместимо с разными вариантами pymodbus (2.x / 3.x):
+    - пробуем с unit=..., при TypeError повторяем без unit
+    - запись катушек с подтверждением чтением; при несоответствии пробуем addr-1
+    - ток/напряжение читаем как int16 (поддержка отрицательных)
+    - автосвоп I/U и автосмещение адреса входных регистров (+/-1)
+    - А·ч читаем из блока 6 слов, начиная с ERROR_FLAGS (индексы 4..5)
     """
     def __init__(self, client: ModbusClientT, unit_id: int = 1):
         self.client = client
         self.unit = unit_id
         self._iv_swapped = False
         self._addr_shift = 0
-        # Попробуем задать идентификатор слейва в сам клиент — для реализаций без unit=...
+        # На всякий случай проставим unit в клиент (для старых реализаций):
         for attr in ("unit_id", "unit", "slave"):
             try:
                 setattr(self.client, attr, self.unit)
             except Exception:
                 pass
 
-    # -------- вспомогательные совместимые вызовы --------
+    # ---------- совместимые обёртки ----------
     def _read_input_registers(self, address: int, count: int = 1):
         try:
             return self.client.read_input_registers(address, count=count, unit=self.unit)
@@ -51,7 +52,7 @@ class SourceDriver:
         except TypeError:
             return self.client.read_coils(address, count=count)
 
-    def _write_coil(self, address: int, value: bool):
+    def _write_coil_raw(self, address: int, value: bool):
         try:
             return self.client.write_coil(address, bool(value), unit=self.unit)
         except TypeError:
@@ -63,7 +64,7 @@ class SourceDriver:
         except TypeError:
             return self.client.write_register(address, int(value))
 
-    # -------- общие утилиты --------
+    # ---------- утилиты ----------
     @staticmethod
     def _s16(x: int) -> int:
         return x - 0x10000 if x & 0x8000 else x
@@ -77,8 +78,8 @@ class SourceDriver:
 
     def _read_block_flex(self, start_addr: int, count: int):
         """
-        Читаем блок с автосмещением адреса. Пробуем последовательность смещений:
-        текущий self._addr_shift, затем -1, +1, 0.
+        Читаем блок входных регистров с автосмещением адреса.
+        Порядок попыток: текущий self._addr_shift, затем -1, +1, 0.
         """
         shifts = [self._addr_shift, -1, +1, 0]
         seen = set()
@@ -93,24 +94,41 @@ class SourceDriver:
                 return regs
         return None
 
-    # -------- Coils --------
+    # ---------- запись катушек с верификацией ----------
+    def _verify_coil(self, address: int, value: bool) -> bool:
+        rr = self._read_coils(address, count=1)
+        bits = getattr(rr, "bits", None)
+        return (hasattr(rr, "isError") and not rr.isError()) and (bits is not None) and bool(bits[0]) == bool(value)
+
+    def _write_coil_flex(self, address: int, value: bool) -> bool:
+        """
+        Пишем катушку и подтверждаем чтением.
+        Если подтверждение не прошло — пробуем address-1 (на случай 1-based адресации на стороне устройства).
+        """
+        r = self._write_coil_raw(address, value)
+        ok = hasattr(r, "isError") and not r.isError()
+        if ok and self._verify_coil(address, value):
+            return True
+
+        # fallback: адрес-1
+        r2 = self._write_coil_raw(address - 1, value)
+        ok2 = hasattr(r2, "isError") and not r2.isError()
+        return ok2 and self._verify_coil(address - 1, value)
+
+    # ---------- Coils ----------
     def set_device_power(self, on: bool) -> bool:
-        rr = self._write_coil(coil(Coils.ENABLE_DEVICE), bool(on))
-        return hasattr(rr, "isError") and not rr.isError()
+        return self._write_coil_flex(coil(Coils.ENABLE_DEVICE), bool(on))
 
     def set_inverter_enable(self, on: bool) -> bool:
-        rr = self._write_coil(coil(Coils.INVERTER_ENABLE), bool(on))
-        return hasattr(rr, "isError") and not rr.isError()
+        return self._write_coil_flex(coil(Coils.INVERTER_ENABLE), bool(on))
 
     def reset_ah_counter(self) -> bool:
-        r1 = self._write_coil(coil(Coils.AH_RESET), True)
-        r2 = self._write_coil(coil(Coils.AH_RESET), False)
-        return all((hasattr(r1, "isError") and not r1.isError(),
-                    hasattr(r2, "isError") and not r2.isError()))
+        ok1 = self._write_coil_flex(coil(Coils.AH_RESET), True)
+        ok2 = self._write_coil_flex(coil(Coils.AH_RESET), False)
+        return ok1 and ok2
 
     def set_control_mode_lock(self, locked: bool) -> bool:
-        rr = self._write_coil(coil(Coils.CONTROL_MODE_LOCK), bool(locked))
-        return hasattr(rr, "isError") and not rr.isError()
+        return self._write_coil_flex(coil(Coils.CONTROL_MODE_LOCK), bool(locked))
 
     def read_control_mode_info(self) -> Optional[int]:
         rr = self._read_coils(coil(Coils.CONTROL_MODE_INFO), count=1)
@@ -119,7 +137,7 @@ class SourceDriver:
             return None
         return 1 if bits[0] else 0
 
-    # -------- Holding --------
+    # ---------- Holding ----------
     def set_current_setpoint(self, value: int) -> bool:
         rr = self._write_register(holding_reg(HoldingRegs.CURRENT_SETPOINT), int(value))
         return hasattr(rr, "isError") and not rr.isError()
@@ -131,11 +149,10 @@ class SourceDriver:
             return None
         return int(regs[0])
 
-    # -------- Inputs --------
+    # ---------- Inputs ----------
     def read_measurements(self) -> Optional[Measurements]:
         """
-        Читаем единым блоком 6 слов, начиная с ERROR_FLAGS:
-          [0] ошибки, [1] I, [2] U, [3] полярность, [4] А·ч lo, [5] А·ч hi
+        [0] ошибки, [1] I, [2] U, [3] полярность, [4] А·ч lo, [5] А·ч hi
         Затем — 2 слова температур от TEMP1.
         """
         base = input_reg(InputRegs.ERROR_FLAGS)
@@ -143,15 +160,9 @@ class SourceDriver:
         if regs1 is None or len(regs1) < 6:
             return None
 
-        err   = regs1[0]
-        i_raw = regs1[1]
-        v_raw = regs1[2]
-        pol   = regs1[3]
-        ah_lo = regs1[4]
-        ah_hi = regs1[5]
-        ah32  = u32_from_words(ah_hi, ah_lo)
+        err, i_raw, v_raw, pol, ah_lo, ah_hi = regs1[0], regs1[1], regs1[2], regs1[3], regs1[4], regs1[5]
+        ah32 = u32_from_words(ah_hi, ah_lo)
 
-        # авто-своп I/U (если один ноль, другой нет) — запоминаем один раз
         if not self._iv_swapped:
             if (v_raw == 0 and i_raw != 0) or (i_raw == 0 and v_raw != 0):
                 self._iv_swapped = True
@@ -161,9 +172,7 @@ class SourceDriver:
         curr = self._s16(i_raw) * SCALE_I
         volt = self._s16(v_raw) * SCALE_V
 
-        # температуры
-        tbase = input_reg(InputRegs.TEMP1)
-        regs2 = self._read_block_flex(tbase, 2)
+        regs2 = self._read_block_flex(input_reg(InputRegs.TEMP1), 2)
         if not regs2:
             t1 = t2 = None
         else:
@@ -181,8 +190,8 @@ class SourceDriver:
             error_mains=bool((int(err) >> ErrorBits.MAINS_MONITOR) & 1),
         )
 
-    # -------- Пинг --------
+    # ---------- Пинг ----------
     def ping(self) -> bool:
         base = input_reg(InputRegs.ERROR_FLAGS)
-        regs1 = self._read_block_flex(base, 2)  # [0]=err, [1]=I
+        regs1 = self._read_block_flex(base, 2)
         return regs1 is not None
