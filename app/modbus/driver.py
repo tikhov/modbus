@@ -8,8 +8,8 @@ from .registry import (
 )
 
 ModbusClientT = ModbusSerialClient | ModbusTcpClient
-SCALE_I = 1.0
-SCALE_V = 1.0
+SCALE_I = 0.1
+SCALE_V = 0.1
 
 
 class SourceDriver:
