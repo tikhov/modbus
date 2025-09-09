@@ -225,8 +225,8 @@ class MainWindow(QMainWindow):
     # измерения/таймер
     def _on_meas(self, meas):
         try:
-            v = int(round(meas.voltage)); i = int(round(meas.current))
-            self.lbl_voltage.setText(f"{v:+d} В".replace("+","")); self.lbl_current.setText(f"{i:d} А")
+            i = int(round(meas.current)); v = int(round(meas.voltage))
+            self.lbl_current.setText(f"{i:d} А"); self.lbl_voltage.setText(f"{v:+d} В".replace("+",""))
             self.lbl_ah.setText(f"{int(meas.ah_counter)} А·ч")
 
             if getattr(meas, "error_overheat", False) or getattr(meas, "error_mains", False):
