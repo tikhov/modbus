@@ -8,8 +8,8 @@ from .registry import (
 )
 
 ModbusClientT = ModbusSerialClient | ModbusTcpClient
-SCALE_I = 1.0
-SCALE_V = 1.0
+SCALE_I = 0.1
+SCALE_V = 0.1
 
 
 class SourceDriver:
@@ -167,23 +167,21 @@ class SourceDriver:
         if regs1 is None or len(regs1) < 6:
             return None
 
-        err, i_raw, v_raw, pol, ah_lo, ah_hi = (
-            regs1[0],
-            regs1[1],
-            regs1[2],
-            regs1[3],
-            regs1[4],
-            regs1[5],
-        )
+        i_idx = input_reg(InputRegs.OUTPUT_CURRENT) - base
+        v_idx = input_reg(InputRegs.OUTPUT_VOLTAGE) - base
+        pol_idx = input_reg(InputRegs.POLARITY) - base
+        ah_lo_idx = input_reg(InputRegs.AH_COUNTER_LO) - base
+        ah_hi_idx = input_reg(InputRegs.AH_COUNTER_HI) - base
+
+        err = regs1[0]
+        i_raw = regs1[i_idx]
+        v_raw = regs1[v_idx]
+        pol = regs1[pol_idx]
+        ah_lo = regs1[ah_lo_idx]
+        ah_hi = regs1[ah_hi_idx]
         ah32 = u32_from_words(ah_hi, ah_lo)
 
-        swap = self._swap_iv
-        if swap is None and not (i_raw == 0 and v_raw == 0):
-            # Напряжение обычно существенно больше тока. Если наблюдается обратное,
-            # считаем, что регистры поменяны местами.
-            swap = abs(v_raw) < abs(i_raw)
-            self._swap_iv = swap
-        if swap:
+        if self._swap_iv:
             i_raw, v_raw = v_raw, i_raw
 
         curr = self._s16(i_raw) * SCALE_I

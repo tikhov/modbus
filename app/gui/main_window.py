@@ -131,7 +131,7 @@ class MainWindow(QMainWindow):
         w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(24,24,24,24); v.setSpacing(16)
 
         # крупные показания
-        self.lbl_voltage = QLabel("0000 В"); self.lbl_current = QLabel("0000 А")
+        self.lbl_voltage = QLabel("0,0 В"); self.lbl_current = QLabel("0,0 А")
         for l in (self.lbl_voltage, self.lbl_current): l.setAlignment(Qt.AlignCenter)
         self.lbl_voltage.setStyleSheet(f"color:{WHITE}; font-size:180px; font-weight:800;")
         self.lbl_current.setStyleSheet(f"color:{ACCENT}; font-size:160px; font-weight:800;")
@@ -225,8 +225,9 @@ class MainWindow(QMainWindow):
     # измерения/таймер
     def _on_meas(self, meas):
         try:
-            v = int(round(meas.voltage)); i = int(round(meas.current))
-            self.lbl_voltage.setText(f"{v:+d} В".replace("+","")); self.lbl_current.setText(f"{i:d} А")
+            v = float(meas.voltage); i = float(meas.current)
+            self.lbl_voltage.setText(f"{v:+.1f} В".replace("+", "").replace(".", ","))
+            self.lbl_current.setText(f"{i:.1f} А".replace(".", ","))
             self.lbl_ah.setText(f"{int(meas.ah_counter)} А·ч")
 
             if getattr(meas, "error_overheat", False) or getattr(meas, "error_mains", False):
@@ -238,7 +239,7 @@ class MainWindow(QMainWindow):
                     self.power_state = "ready"
             self._update_power_icon()
         except Exception:
-            self.lbl_voltage.setText("0000 В"); self.lbl_current.setText("0000 А"); self.lbl_ah.setText("0 А·ч")
+            self.lbl_voltage.setText("0,0 В"); self.lbl_current.setText("0,0 А"); self.lbl_ah.setText("0 А·ч")
 
     def _tick_runtime(self):
         if self._start_epoch is None: return
