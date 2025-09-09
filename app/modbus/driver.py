@@ -8,8 +8,8 @@ from .registry import (
 )
 
 ModbusClientT = ModbusSerialClient | ModbusTcpClient
-SCALE_I = 1.0
-SCALE_V = 1.0
+SCALE_I = 0.1
+SCALE_V = 0.1
 
 
 class SourceDriver:
@@ -178,7 +178,7 @@ class SourceDriver:
         ah32 = u32_from_words(ah_hi, ah_lo)
 
         swap = self._swap_iv
-        if swap is None and not (i_raw == 0 and v_raw == 0):
+        if swap is None and i_raw != 0 and v_raw != 0:
             # Напряжение обычно существенно больше тока. Если наблюдается обратное,
             # считаем, что регистры поменяны местами.
             swap = abs(v_raw) < abs(i_raw)
