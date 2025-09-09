@@ -18,13 +18,20 @@ class SourceDriver:
     - пробуем с unit=..., при TypeError повторяем без unit
     - запись катушек с подтверждением чтением; при несоответствии пробуем addr-1
     - ток/напряжение читаем как int16 (поддержка отрицательных)
-    - автосвоп I/U и автосмещение адреса входных регистров (+/-1)
+    - автосвоп I/U (можно явно включить через swap_iv) и автосмещение адреса
+      входных регистров (+/-1)
     - А·ч читаем из блока 6 слов, начиная с ERROR_FLAGS (индексы 4..5)
     """
-    def __init__(self, client: ModbusClientT, unit_id: int = 1):
+    def __init__(
+        self,
+        client: ModbusClientT,
+        unit_id: int = 1,
+        swap_iv: Optional[bool] = None,
+    ):
         self.client = client
         self.unit = unit_id
-        self._iv_swapped = False
+        # None означает автоопределение по величинам, True/False — принудительно
+        self._swap_iv = swap_iv
         self._addr_shift = 0
         # На всякий случай проставим unit в клиент (для старых реализаций):
         for attr in ("unit_id", "unit", "slave"):
@@ -160,13 +167,23 @@ class SourceDriver:
         if regs1 is None or len(regs1) < 6:
             return None
 
-        err, i_raw, v_raw, pol, ah_lo, ah_hi = regs1[0], regs1[1], regs1[2], regs1[3], regs1[4], regs1[5]
+        err, i_raw, v_raw, pol, ah_lo, ah_hi = (
+            regs1[0],
+            regs1[1],
+            regs1[2],
+            regs1[3],
+            regs1[4],
+            regs1[5],
+        )
         ah32 = u32_from_words(ah_hi, ah_lo)
 
-        if not self._iv_swapped:
-            if (v_raw == 0 and i_raw != 0) or (i_raw == 0 and v_raw != 0):
-                self._iv_swapped = True
-        if self._iv_swapped:
+        swap = self._swap_iv
+        if swap is None and not (i_raw == 0 and v_raw == 0):
+            # Напряжение обычно существенно больше тока. Если наблюдается обратное,
+            # считаем, что регистры поменяны местами.
+            swap = abs(v_raw) < abs(i_raw)
+            self._swap_iv = swap
+        if swap:
             i_raw, v_raw = v_raw, i_raw
 
         curr = self._s16(i_raw) * SCALE_I
