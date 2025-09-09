@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, List
 from pymodbus.client import ModbusSerialClient, ModbusTcpClient
 from .registry import (
     Coils, InputRegs, HoldingRegs, ErrorBits,
@@ -8,32 +8,33 @@ from .registry import (
 )
 
 ModbusClientT = ModbusSerialClient | ModbusTcpClient
+
+# Твой прибор отдаёт десятые доли -> масштабирую к «человеческим» единицам
 SCALE_I = 0.1
 SCALE_V = 0.1
+
+ADDR_MIN = 0
+ADDR_MAX = 65535  # верхняя граница (исключая)
 
 
 class SourceDriver:
     """
-    Совместимо с разными вариантами pymodbus (2.x / 3.x):
-    - пробуем с unit=..., при TypeError повторяем без unit
-    - запись катушек с подтверждением чтением; при несоответствии пробуем addr-1
-    - ток/напряжение читаем как int16 (поддержка отрицательных)
-    - автосвоп I/U (можно явно включить через swap_iv) и автосмещение адреса
-      входных регистров (+/-1)
-    - А·ч читаем из блока 6 слов, начиная с ERROR_FLAGS (индексы 4..5)
+    Pymodbus 2.x/3.x совместимо.
+
+    Под твоё устройство:
+    - Начальный сдвиг адресации input-регистров = +1.
+    - I и U читаем поштучно «умным» методом (без попыток отрицательных адресов).
+    - Остальные поля читаем блочно, при необходимости — поштучно.
+    - Никаких address < 0.
+    - Запись катушек — с подтверждением, при несовпадении пробуем addr-1.
     """
-    def __init__(
-        self,
-        client: ModbusClientT,
-        unit_id: int = 1,
-        swap_iv: Optional[bool] = None,
-    ):
+    def __init__(self, client: ModbusClientT, unit_id: int = 1, swap_iv: Optional[bool] = None):
         self.client = client
         self.unit = unit_id
-        # None означает автоопределение по величинам, True/False — принудительно
-        self._swap_iv = swap_iv
-        self._addr_shift = 0
-        # На всякий случай проставим unit в клиент (для старых реализаций):
+        self._swap_iv: Optional[bool] = swap_iv  # None — автоопределение
+        # Критично: начинаем сдвиг с +1 (по твоему дампу это «правильное окно»)
+        self._addr_shift = 1
+
         for attr in ("unit_id", "unit", "slave"):
             try:
                 setattr(self.client, attr, self.unit)
@@ -71,41 +72,102 @@ class SourceDriver:
         except TypeError:
             return self.client.write_register(address, int(value))
 
-    # ---------- утилиты ----------
+    # ---------- утилиты чтения ----------
     @staticmethod
     def _s16(x: int) -> int:
         return x - 0x10000 if x & 0x8000 else x
 
-    def _read_inp(self, addr: int, count: int = 1):
-        rr = self._read_input_registers(addr, count=count)
+    @staticmethod
+    def _pair_addrs_input(addr_1based: int) -> tuple[int, int]:
+        """
+        Две базы адресации:
+          - offset (0-based внутри input-диапазона): input_reg(30001)=0, 30002=1, ...
+          - absolute (1-based-1): 30001→30000, 30002→30001, ...
+        """
+        offset = input_reg(addr_1based)
+        absolute = addr_1based - 1
+        return offset, absolute
+
+    @staticmethod
+    def _ok_regs(rr, need: int) -> Optional[List[int]]:
         if getattr(rr, "isError", lambda: True)():
             return None
         regs = getattr(rr, "registers", None)
-        return regs if regs and len(regs) >= count else None
+        return regs if regs and len(regs) >= need else None
 
-    def _read_block_flex(self, start_addr: int, count: int):
+    @staticmethod
+    def _addr_is_ok(start: int, count: int) -> bool:
+        return start >= ADDR_MIN and (start + count - 1) < ADDR_MAX
+
+    def _read_inp_mode(self, base_addr: int, count: int) -> Optional[List[int]]:
+        if not self._addr_is_ok(base_addr, count):
+            return None
+        return self._ok_regs(self._read_input_registers(base_addr, count=count), count)
+
+    def _read_hold_mode(self, base_addr: int, count: int) -> Optional[List[int]]:
+        if not self._addr_is_ok(base_addr, count):
+            return None
+        return self._ok_regs(self._read_holding_registers(base_addr, count=count), count)
+
+    def _shifts_for(self) -> List[int]:
         """
-        Читаем блок входных регистров с автосмещением адреса.
-        Порядок попыток: текущий self._addr_shift, затем -1, +1, 0.
+        Порядок перебора сдвигов:
+        - текущий (обычно +1)
+        - 0
+        - +1 (на случай сбоя внутреннего состояния)
         """
-        shifts = [self._addr_shift, -1, +1, 0]
-        seen = set()
-        for sh in shifts:
-            if sh in seen:
-                continue
-            seen.add(sh)
-            regs = self._read_inp(start_addr + sh, count=count)
-            if regs is not None:
-                if self._addr_shift != sh:
-                    self._addr_shift = sh
-                return regs
+        out = [self._addr_shift, 0, 1]
+        # убрать дубликаты, сохранить порядок
+        seen = set(); res = []
+        for x in out:
+            if x not in seen:
+                seen.add(x); res.append(x)
+        return res
+
+    def _read_block_smart(self, addr_1based_start: int, count: int) -> Optional[List[int]]:
+        """
+        Пробуем две схемы адресации (offset/absolute).
+        В каждой — безопасные сдвиги: [self._addr_shift, 0, +1], без отрицательных адресов.
+        """
+        off_base, abs_base = self._pair_addrs_input(addr_1based_start)
+        for reader in (self._read_inp_mode, self._read_hold_mode):
+            for base in (off_base, abs_base):
+                for sh in self._shifts_for():
+                    start = base + sh
+                    regs = reader(start, count)
+                    if regs is not None:
+                        if self._addr_shift != sh:
+                            self._addr_shift = sh
+                        return regs
+        return None
+
+    def _read_single_smart(self, addr_1based: int) -> Optional[int]:
+        """
+        Поштучное чтение адреса с авто-подбором адресации и сдвига.
+        Сдвиги только безопасные (без отрицательных адресов).
+        """
+        off_base, abs_base = self._pair_addrs_input(addr_1based)
+        for reader in (self._read_inp_mode, self._read_hold_mode):
+            for base in (off_base, abs_base):
+                for sh in self._shifts_for():
+                    start = base + sh
+                    regs = reader(start, 1)
+                    if regs is not None:
+                        if self._addr_shift != sh:
+                            self._addr_shift = sh
+                        return regs[0]
         return None
 
     # ---------- запись катушек с верификацией ----------
     def _verify_coil(self, address: int, value: bool) -> bool:
         rr = self._read_coils(address, count=1)
         bits = getattr(rr, "bits", None)
-        return (hasattr(rr, "isError") and not rr.isError()) and (bits is not None) and bool(bits[0]) == bool(value)
+        if hasattr(rr, "isError") and rr.isError():
+            return False
+        if bits is None:
+            # некоторые реализации не возвращают bits — считаем успех по отсутствию ошибки записи
+            return True
+        return bool(bits[0]) == bool(value)
 
     def _write_coil_flex(self, address: int, value: bool) -> bool:
         """
@@ -159,39 +221,55 @@ class SourceDriver:
     # ---------- Inputs ----------
     def read_measurements(self) -> Optional[Measurements]:
         """
-        [0] ошибки, [1] I, [2] U, [3] полярность, [4] А·ч lo, [5] А·ч hi
-        Затем — 2 слова температур от TEMP1.
+        I/U — только поштучно «умным» методом (правильный shift подберётся).
+        Остальное — блочно от 30001, при необходимости — поштучно.
         """
-        base = input_reg(InputRegs.ERROR_FLAGS)
-        regs1 = self._read_block_flex(base, 6)
-        if regs1 is None or len(regs1) < 6:
+        # I/U
+        i_raw = self._read_single_smart(InputRegs.OUTPUT_CURRENT)
+        u_raw = self._read_single_smart(InputRegs.OUTPUT_VOLTAGE)
+        if i_raw is None or u_raw is None:
             return None
 
-        i_idx = input_reg(InputRegs.OUTPUT_CURRENT) - base
-        v_idx = input_reg(InputRegs.OUTPUT_VOLTAGE) - base
-        pol_idx = input_reg(InputRegs.POLARITY) - base
-        ah_lo_idx = input_reg(InputRegs.AH_COUNTER_LO) - base
-        ah_hi_idx = input_reg(InputRegs.AH_COUNTER_HI) - base
-
-        err = regs1[0]
-        i_raw = regs1[i_idx]
-        v_raw = regs1[v_idx]
-        pol = regs1[pol_idx]
-        ah_lo = regs1[ah_lo_idx]
-        ah_hi = regs1[ah_hi_idx]
-        ah32 = u32_from_words(ah_hi, ah_lo)
-
+        # автосвоп I/U при явном перекосе
+        if self._swap_iv is None:
+            if (u_raw == 0 and i_raw not in (0, None)) or (i_raw == 0 and u_raw not in (0, None)):
+                self._swap_iv = True
         if self._swap_iv:
-            i_raw, v_raw = v_raw, i_raw
+            i_raw, u_raw = u_raw, i_raw
 
-        curr = self._s16(i_raw) * SCALE_I
-        volt = self._s16(v_raw) * SCALE_V
+        curr = self._s16(int(i_raw)) * SCALE_I
+        volt = self._s16(int(u_raw)) * SCALE_V
 
-        regs2 = self._read_block_flex(input_reg(InputRegs.TEMP1), 2)
-        if not regs2:
-            t1 = t2 = None
+        # Остальные поля — блочно 30001.., при необходимости — поштучно
+        regs1 = self._read_block_smart(InputRegs.ERROR_FLAGS, 6)
+        err = pol = ah_lo = ah_hi = None
+        if regs1 and len(regs1) >= 6:
+            base_off = input_reg(InputRegs.ERROR_FLAGS)
+            idx = lambda a1: input_reg(a1) - base_off
+            try:
+                err   = regs1[idx(InputRegs.ERROR_FLAGS)]
+                pol   = regs1[idx(InputRegs.POLARITY)]
+                ah_lo = regs1[idx(InputRegs.AH_COUNTER_LO)]
+                ah_hi = regs1[idx(InputRegs.AH_COUNTER_HI)]
+            except Exception:
+                pass
+
+        if err   is None: err   = self._read_single_smart(InputRegs.ERROR_FLAGS)
+        if pol   is None: pol   = self._read_single_smart(InputRegs.POLARITY)
+        if ah_lo is None: ah_lo = self._read_single_smart(InputRegs.AH_COUNTER_LO)
+        if ah_hi is None: ah_hi = self._read_single_smart(InputRegs.AH_COUNTER_HI)
+        if None in (err, pol, ah_lo, ah_hi):
+            return None
+
+        ah32 = u32_from_words(int(ah_hi), int(ah_lo))
+
+        # Температуры
+        t_regs = self._read_block_smart(InputRegs.TEMP1, 2)
+        if t_regs and len(t_regs) >= 2:
+            t1, t2 = t_regs[0], t_regs[1]
         else:
-            t1, t2 = regs2[0], regs2[1]
+            t1 = self._read_single_smart(InputRegs.TEMP1)
+            t2 = self._read_single_smart(InputRegs.TEMP2)
 
         return Measurements(
             current=float(curr),
@@ -207,6 +285,5 @@ class SourceDriver:
 
     # ---------- Пинг ----------
     def ping(self) -> bool:
-        base = input_reg(InputRegs.ERROR_FLAGS)
-        regs1 = self._read_block_flex(base, 2)
-        return regs1 is not None
+        # Самый надёжный быстрый ping — одиночное чтение 30001
+        return self._read_single_smart(InputRegs.ERROR_FLAGS) is not None

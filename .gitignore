@@ -212,3 +212,4 @@ __pycache__/
 profiles.db
 power-controller.zip
 .idea/
+tests/*

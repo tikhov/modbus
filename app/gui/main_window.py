@@ -54,6 +54,10 @@ class MainWindow(QMainWindow):
         self.store = AppStore(self)
         self.source = SourceController(self.store, self)
 
+        # Флаг, который принудительно меняет местами ток и напряжение ПРИ ОТОБРАЖЕНИИ
+        # (независимо от того, что отдал драйвер). Включён под твой прибор.
+        self._display_swap_iv = True
+
         self.power_state = "ready"  # "ready" | "on" | "stop"
 
         self._run_timer = QTimer(self)
@@ -225,19 +229,26 @@ class MainWindow(QMainWindow):
     # измерения/таймер
     def _on_meas(self, meas):
         try:
-            i = int(round(meas.current)); v = int(round(meas.voltage))
-            self.lbl_current.setText(f"{i:d} А"); self.lbl_voltage.setText(f"{v:+d} В".replace("+",""))
-            v = float(meas.voltage); i = float(meas.current)
+            v = float(meas.voltage)
+            i = float(meas.current)
+
+            # >>> ЖЁСТКО: меняем местами для отображения, если требуется <<<
+            if self._display_swap_iv:
+                v, i = i, v
+
+            # формат: одна десятая + запятая
             self.lbl_voltage.setText(f"{v:+.1f} В".replace("+", "").replace(".", ","))
             self.lbl_current.setText(f"{i:.1f} А".replace(".", ","))
+
             self.lbl_ah.setText(f"{int(meas.ah_counter)} А·ч")
 
+            # Логика состояния оценивает уже «правильные» (после свопа) значения
             if getattr(meas, "error_overheat", False) or getattr(meas, "error_mains", False):
                 self.power_state = "stop"
             else:
-                if abs(i) > 0:
+                if abs(i) > 0 or abs(v) > 0:
                     self.power_state = "on"
-                elif v == 0:
+                else:
                     self.power_state = "ready"
             self._update_power_icon()
         except Exception:
@@ -261,19 +272,23 @@ class MainWindow(QMainWindow):
     def _toggle_power(self):
         want_on = True if self.power_state in ("ready", "stop") else False
         old_state = self.power_state
+        # Оптимистично меняем иконку, но откатим, если запись не удастся
         self.power_state = "on" if want_on else "ready"; self._update_power_icon()
 
         ok = False
-        try: ok = bool(self.source.set_power(want_on))
-        except Exception: ok = False
+        try:
+            ok = bool(self.source.set_power(want_on))
+        except Exception:
+            ok = False
 
         if not ok and hasattr(self.source, "driver") and self.source.driver:
             try:
                 ok1 = bool(self.source.driver.set_device_power(want_on))
                 ok2 = bool(self.source.driver.set_inverter_enable(want_on))
-                ok = ok1 or ok2
+                ok = ok1 and ok2
             except Exception:
                 ok = False
 
         if not ok:
-            self.power_state = old_state; self._update_power_icon()
+            self.power_state = old_state
+            self._update_power_icon()
