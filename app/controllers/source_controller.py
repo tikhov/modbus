@@ -42,6 +42,18 @@ def _normalize_port_name(raw: str | None) -> str:
     return m.group(1).upper() if m else s.strip()
 
 
+def _parse_bool(val) -> Optional[bool]:
+    """Возвращает True/False/None из разных представлений."""
+    if isinstance(val, bool) or val is None:
+        return val
+    s = str(val).strip().lower()
+    if s in ("1", "true", "yes", "y", "on"):
+        return True
+    if s in ("0", "false", "no", "n", "off"):
+        return False
+    return None
+
+
 class SourceController(QObject):
     """
     Управляет подключением/отключением и высокоуровневыми командами.
@@ -65,6 +77,7 @@ class SourceController(QObject):
         """
         self.disconnect()
         self.conn_type = (conn_type or "").upper().strip()
+        swap_iv = _parse_bool(settings.get("swap_iv"))
 
         try:
             if self.conn_type == "RTU":
@@ -95,7 +108,7 @@ class SourceController(QObject):
                         f"(baud={baudrate}, parity={parity}, stop={stopbits}, data=8)."
                     )
 
-                self.driver = SourceDriver(self.client, unit_id=unit_id)
+                self.driver = SourceDriver(self.client, unit_id=unit_id, swap_iv=swap_iv)
 
                 # Быстрый ping (ничего не записывает в прибор)
                 if not self.driver.ping():
@@ -114,7 +127,7 @@ class SourceController(QObject):
                 if not self.client.connect():
                     raise RuntimeError(f"Не удалось подключиться к {host}:{port}.")
 
-                self.driver = SourceDriver(self.client, unit_id=unit_id)
+                self.driver = SourceDriver(self.client, unit_id=unit_id, swap_iv=swap_iv)
 
                 if not self.driver.ping():
                     raise RuntimeError(
