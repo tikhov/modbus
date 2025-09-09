@@ -1,0 +1,87 @@
+
+/* ===== Global gray UI per tz.txt ===== */
+QWidget {
+    background: #d9d9d9; /* light gray */
+    color: #111827;      /* near-black text */
+    font-size: 14px;
+}
+
+/* Headings used in some screens */
+QLabel[role="title"] {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* Buttons like TFT_IPG panel vibe */
+QPushButton {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #f8f9fa, stop:1 #e6e9ef);
+    border: 1px solid #c7cdd6;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ffffff, stop:1 #eef2f7);
+}
+QPushButton:pressed {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #e0e4ea, stop:1 #cfd6e0);
+}
+
+/* Primary / Danger / Enter styles via objectName */
+QPushButton#btnPrimary {
+    border-color: #2563eb;
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #3b82f6, stop:1 #2563eb);
+    color: white;
+}
+QPushButton#btnPrimary:hover {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #60a5fa, stop:1 #3b82f6);
+}
+QPushButton#btnPrimary:pressed {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #1d4ed8, stop:1 #1e40af);
+}
+
+QPushButton#btnDanger {
+    border-color: #dc2626;
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ef4444, stop:1 #dc2626);
+    color: white;
+}
+QPushButton#btnDanger:hover {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #f87171, stop:1 #ef4444);
+}
+QPushButton#btnDanger:pressed {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #b91c1c, stop:1 #991b1b);
+}
+
+QPushButton#btnEnter {
+    border-color: #059669;
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #10b981, stop:1 #059669);
+    color: white;
+}
+QPushButton#btnEnter:hover {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #34d399, stop:1 #10b981);
+}
+QPushButton#btnEnter:pressed {
+    background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #047857, stop:1 #065f46);
+}
+
+/* Top navigation toolbuttons — using dynamic property [topnav="1"] */
+QToolButton[topnav="1"] {
+    background: transparent;
+    border: none;
+    padding: 6px 10px;
+    color: #1f2937;
+}
+QToolButton[topnav="1"]:hover {
+    background: rgba(0,0,0,0.06);
+    border-radius: 10px;
+}
+QToolButton[topnav="1"]:checked {
+    background: rgba(31,41,55,0.12);
+    border-radius: 10px;
+}
+
+/* Status bar styling */
+QWidget#StatusBar {
+    background: #e5e7eb;
+    border-top: 1px solid #c7cdd6;
+}
