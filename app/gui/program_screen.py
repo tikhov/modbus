@@ -15,24 +15,3 @@ class ProgramScreen(QWidget):
 
         center = QVBoxLayout()
         center.addStretch()
-
-        row = QHBoxLayout()
-        btnStart = QPushButton("ПУСК")
-        btnStart.setObjectName("btnPrimary")
-        btnStart.setMinimumHeight(44)
-        row.addWidget(btnStart)
-
-        btnStop = QPushButton("СТОП")
-        btnStop.setObjectName("btnDanger")
-        btnStop.setMinimumHeight(44)
-        row.addWidget(btnStop)
-
-        btnEnter = QPushButton("ВВОД")
-        btnEnter.setObjectName("btnEnter")
-        btnEnter.setMinimumHeight(44)
-        row.addWidget(btnEnter)
-
-        center.addLayout(row)
-        center.addStretch()
-
-        v.addLayout(center, 1)

@@ -83,11 +83,7 @@ class LeftNav(QWidget):
     # ---------- построение ----------
 
     def _icon_path(self, name: str) -> str:
-        p = os.path.join(ASSETS_DIR, "icons", name)
-        if not os.path.exists(p) and name == "gear.svg":
-            # fallback на случай отсутствия шестерёнки
-            return os.path.join(ASSETS_DIR, "icons", "info.svg")
-        return p
+        return os.path.join(ASSETS_DIR, "icons", name)
 
     def _add_nav_item(self, key: str):
         wrap = QWidget(self)
@@ -148,8 +144,8 @@ class LeftNav(QWidget):
     def _update_icon_metrics(self):
         # доступная ширина с учётом внешних отступов слева/справа = margins 10 + 10
         content_w = max(1, self.width() - 20)
-        icon_size = max(16, int(content_w * 0.90))   # 90% ширины панели
-        bottom_gap = icon_size // 2                  # отступ снизу = половина высоты
+        icon_size = max(16, int(content_w * 0.80))   # 90% ширины панели
+        bottom_gap = icon_size // 1                  # отступ снизу = половина высоты
 
         for key, it in self._items.items():
             path = self._icon_path(self._defs[key])
