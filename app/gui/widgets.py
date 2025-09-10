@@ -10,10 +10,8 @@ from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QToolButton, QSizePo
 class AlertBox(QWidget):
     """
     Лёгкий алерт (info/warning/success/danger) с плавным появлением.
-    Для kind='danger' показывает кнопку копирования текста в буфер.
-    Сигналы:
-        alertShown(text:str, kind:str)
-        alertCleared()
+    • Для kind='danger' — обычная кнопка «Копировать текст ошибки» (как в оверлее).
+    • Для подсказок (не danger) — крестик ✕ для закрытия.
     """
     alertShown = Signal(str, str)
     alertCleared = Signal()
@@ -24,7 +22,7 @@ class AlertBox(QWidget):
         self._text = ""
         self._kind = "info"
 
-        # ОДНА ГОРИЗОНТАЛЬНАЯ СТРОКА: текст + кнопка копирования
+        # ОДНА ГОРИЗОНТАЛЬНАЯ СТРОКА: текст + (копировать ИЛИ крестик)
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
@@ -44,22 +42,25 @@ class AlertBox(QWidget):
         self._label = QLabel("", self._card)
         self._label.setWordWrap(True)
         self._label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self._label.setStyleSheet("color: #383d41;")
+        self._label.setStyleSheet("color: #383d41; background: transparent;")
         card_l.addWidget(self._label, 1, Qt.AlignVCenter)
 
-        # Кнопка «копировать» — справа, в той же строке
-        self._btn_copy = QToolButton(self._card)
-        self._btn_copy.setText("📋")
-        self._btn_copy.setToolTip("Скопировать текст ошибки")
-        self._btn_copy.setAutoRaise(True)
-        self._btn_copy.setCursor(Qt.PointingHandCursor)
-        self._btn_copy.setStyleSheet(
-            "QToolButton { border: none; color: #383d41; font-size: 16px; padding: 2px 6px; }"
-            "QToolButton:hover { background: rgba(0,0,0,0.06); border-radius: 6px; }"
-        )
-        self._btn_copy.clicked.connect(self._copy_to_clipboard)
-        self._btn_copy.hide()  # только для danger
-        card_l.addWidget(self._btn_copy, 0, Qt.AlignVCenter)
+        # Обычная кнопка копирования — только для ошибок (danger)
+        self._btn_copy_big = QPushButton("Копировать текст ошибки", self._card)
+        self._btn_copy_big.setCursor(Qt.PointingHandCursor)
+        self._btn_copy_big.clicked.connect(self._copy_to_clipboard)
+        self._btn_copy_big.hide()
+        card_l.addWidget(self._btn_copy_big, 0, Qt.AlignVCenter)
+
+        # Крестик — только для подсказок (не danger)
+        self._btn_close = QToolButton(self._card)
+        self._btn_close.setText("✕")
+        self._btn_close.setToolTip("Закрыть")
+        self._btn_close.setAutoRaise(True)
+        self._btn_close.setCursor(Qt.PointingHandCursor)
+        self._btn_close.clicked.connect(self.clear)
+        self._btn_close.hide()
+        card_l.addWidget(self._btn_close, 0, Qt.AlignVCenter)
 
         row.addWidget(self._card)
 
@@ -77,6 +78,7 @@ class AlertBox(QWidget):
         self._text = text
         self._kind = kind or "info"
 
+        # цвета по типу алерта
         if self._kind == "danger":
             bg, fg = "#f8d7da", "#842029"
         elif self._kind == "warning":
@@ -86,16 +88,43 @@ class AlertBox(QWidget):
         else:
             bg, fg = "#cce5ff", "#383d41"
 
+        # фон карточки
         self._card.setStyleSheet(f"""
             QWidget#AlertCard {{
                 background-color: {bg};
                 border-radius: 12px;
             }}
         """)
-        self._label.setStyleSheet(f"color: {fg};")
-        self._label.setText(text)
-        self._btn_copy.setVisible(self._kind == "danger")
 
+        # текст
+        self._label.setStyleSheet(f"color: {fg}; background: transparent;")
+        self._label.setText(text)
+
+        # стиль кнопок
+        # — копирование (только danger) — как «Вернуться…» в оверлее
+        self._btn_copy_big.setStyleSheet("""
+            QPushButton {
+                background: #842029;
+                color: #FFFFFF;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 14px;
+                font-weight: 600;
+            }
+            QPushButton:hover { background: #6c1b22; }
+        """)
+        # — крестик (цвет текста)
+        self._btn_close.setStyleSheet(
+            f"QToolButton {{ border: none; color: {fg}; background: transparent; font-size: 16px; padding: 2px 6px; }}"
+            "QToolButton:hover { background: rgba(0,0,0,0.06); border-radius: 6px; }"
+        )
+
+        # видимость элементов
+        is_danger = (self._kind == "danger")
+        self._btn_copy_big.setVisible(is_danger)
+        self._btn_close.setVisible(not is_danger)
+
+        # плавное появление
         self.setWindowOpacity(0.0)
         self.show()
         self._anim.stop()
@@ -118,8 +147,8 @@ class AlertBox(QWidget):
         if self._text:
             QGuiApplication.clipboard().setText(self._text)
             # всплывающий тултип рядом с кнопкой
-            pos = self._btn_copy.mapToGlobal(self._btn_copy.rect().center())
-            QToolTip.showText(pos, "Ошибка скопирована в буфер обмена", self._btn_copy)
+            pos = self._btn_copy_big.mapToGlobal(self._btn_copy_big.rect().center())
+            QToolTip.showText(pos, "Ошибка скопирована в буфер обмена", self._btn_copy_big)
 
 
 class DangerOverlay(QWidget):
