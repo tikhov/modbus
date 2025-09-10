@@ -24,6 +24,7 @@ from app.controllers.source_controller import SourceController
 
 APP_BG = "#292116"
 PRIMARY_BORDER = "#EF7F1A"
+TITLE_BAR_BG = "#1E1E1E"   # фон полосы заголовка (внизу)
 WHITE = "#FFFFFF"
 ACCENT = "#EF7F1A"
 
@@ -80,28 +81,54 @@ class MainWindow(QMainWindow):
         for w in (self.home_widget, self.program_widget, self.connection_tab, self.settings_screen, self.info_widget):
             self.stack.addWidget(w)
 
-        # --- ВЕРТИКАЛЬНЫЙ РАЗДЕЛИТЕЛЬ (гарантированная линия) ---
+        # --- ВЕРТИКАЛЬНЫЙ РАЗДЕЛИТЕЛЬ (оранжевая линия) ---
         self.divider = QWidget()
         self.divider.setFixedWidth(3)
         self.divider.setStyleSheet(f"background: {PRIMARY_BORDER};")
 
-        # Корневой лэйаут
+        # -------- Корневой контейнер: горизонтальный (лево: нав, середина: бордер, право: контент) --------
         root = QWidget()
-        lay = QHBoxLayout(root)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(0)
-        lay.addWidget(self.left, 1)   # ~1/8
-        lay.addWidget(self.divider)   # линия между навигацией и контентом
-        lay.addWidget(self.stack, 7)  # ~7/8
-        self.setCentralWidget(root)
+        root_h = QHBoxLayout(root)
+        root_h.setContentsMargins(0, 0, 0, 0)
+        root_h.setSpacing(0)
 
+        # Правая колонка: контент + ПОЛОСА ЗАГОЛОВКА ВНИЗУ
+        right_panel = QWidget()
+        right_v = QVBoxLayout(right_panel)
+        right_v.setContentsMargins(0, 0, 0, 0)
+        right_v.setSpacing(0)
+
+        # Стек контента (занимает всё сверху)
+        right_v.addWidget(self.stack, 1)
+
+        # Полоса названия активной вкладки (ТОЛЬКО в правой области, ВНИЗУ, высота 60)
+        self.tab_title_bar = QWidget()
+        self.tab_title_bar.setFixedHeight(60)
+        self.tab_title_bar.setStyleSheet(f"background: {TITLE_BAR_BG};")
+        title_lay = QHBoxLayout(self.tab_title_bar)
+        title_lay.setContentsMargins(16, 0, 16, 0)
+        title_lay.setSpacing(0)
+
+        self.tab_title_label = QLabel("")  # задаём текст в _on_nav
+        self.tab_title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self.tab_title_label.setStyleSheet("color: #FFFFFF; font-size: 30px; font-weight: 800;")
+        title_lay.addWidget(self.tab_title_label)
+
+        right_v.addWidget(self.tab_title_bar, 0)
+
+        # Собираем всё вместе
+        root_h.addWidget(self.left, 1)    # ~1/8
+        root_h.addWidget(self.divider)    # бордер
+        root_h.addWidget(right_panel, 7)  # ~7/8
+
+        self.setCentralWidget(root)
         self._apply_main_style()
 
         # ---- Статус-бар подключения ----
         sb = self.statusBar()
         sb.setStyleSheet("QStatusBar{background:#1f1a12;color:#fff;} QLabel{color:#fff;}")
         self._status_label = QLabel("")
-        sb.addWidget(self._status_label, 1)  # растягиваем на ширину
+        sb.addWidget(self._status_label, 1)  # растягиваем на ширину окна
         self._status_anim_timer = QTimer(self)
         self._status_anim_timer.setInterval(400)
         self._status_anim_timer.timeout.connect(self._animate_status_dots)
@@ -246,15 +273,23 @@ class MainWindow(QMainWindow):
     # ---------- навигация ----------
     def _on_nav(self, key: str):
         mapping = {"home": 0, "program": 1, "source": 2, "settings": 3, "info": 4}
+        titles = {
+            "home": "Дом",
+            "program": "Программный режим",
+            "source": "Подключение",
+            "settings": "Настройки",
+            "info": "Инфо",
+        }
         self.left.set_active(key)
         self.stack.setCurrentIndex(mapping.get(key, 0))
+        # обновить надпись в полосе названия вкладки (внизу)
+        self.tab_title_label.setText(titles.get(key, ""))
 
     def _apply_nav_enabled(self, connected: bool):
         self.left.set_enabled_tabs(home=True, program=True, source=True, settings=True, info=True)
 
     # ---------- подключение / отключение ----------
     def on_connect(self, conn_type: str, settings: dict):
-        # Уже идёт задача подключения — игнор
         if self._connect_job_active:
             return
         self._connect_job_active = True
@@ -262,9 +297,8 @@ class MainWindow(QMainWindow):
 
         # Показать активность «Подключение…» и ПРОРИСОВАТЬ немедленно
         self._set_status("connecting", "Подключение")
-        QApplication.processEvents()  # дать статус-бару перерисоваться
+        QApplication.processEvents()
 
-        # Запустить блокирующее подключение после возврата в цикл событий
         QTimer.singleShot(0, self._do_connect)
 
     def _do_connect(self):
@@ -272,7 +306,6 @@ class MainWindow(QMainWindow):
             conn_type, settings = self._pending_conn or ("RTU", {})
             ok = self.source.connect(conn_type, settings)
             if ok:
-                # Подключились — запускаем таймер, но источник НЕ включаем автоматически
                 self._start_epoch = time.time()
                 self._elapsed = 0
                 self._run_timer.start()
@@ -280,11 +313,10 @@ class MainWindow(QMainWindow):
                 self._update_power_icon()
                 self.btn_power.setEnabled(True)
                 self._apply_connected_ui(True)
-                self.connection_tab.set_connected(True)   # обновить подпись кнопки
+                self.connection_tab.set_connected(True)
                 self._on_nav("home")
                 self._set_status("connected", f"Подключено ({conn_type})")
             else:
-                # Ошибка — показать алерт на вкладке «Подключение» и статус-бар
                 err = getattr(self.store, "last_error", None) or "Не удалось подключиться. Проверьте параметры."
                 self.stack.setCurrentWidget(self.connection_tab)
                 self.connection_tab.show_connect_error(err)
@@ -298,7 +330,6 @@ class MainWindow(QMainWindow):
             if hasattr(self.source, "disconnect"):
                 self.source.disconnect()
         finally:
-            # UI в режим «отключено»
             self._run_timer.stop()
             self._start_epoch = None
             self._elapsed = 0
@@ -308,7 +339,6 @@ class MainWindow(QMainWindow):
 
     def _on_connection_changed(self, connected: bool):
         if not connected:
-            # Сброс UI
             self._run_timer.stop()
             self._start_epoch = None
             self._elapsed = 0
@@ -321,7 +351,6 @@ class MainWindow(QMainWindow):
             self.btn_power.setEnabled(False)
             self._apply_connected_ui(False)
             self.connection_tab.set_connected(False)
-            # Предполагаем, что сервис пробует переподключаться в фоне
             self._set_status("reconnecting", "Переподключение")
         else:
             self.connection_tab.set_connected(True)
@@ -415,10 +444,6 @@ class MainWindow(QMainWindow):
         self._status_label.setText(f'{dot} {text}')
 
     def _set_status(self, mode: str, base_text: str):
-        """
-        mode: connected | connecting | reconnecting | error | disconnected
-        base_text: без бегущих точек (например, "Подключение" / "Переподключение")
-        """
         mode_changed = (mode != self._status_mode)
         self._status_mode = mode
         if mode_changed:
