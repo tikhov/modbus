@@ -1,109 +1,131 @@
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
-    QSizePolicy, QGraphicsOpacityEffect
+    QVBoxLayout, QPushButton, QGraphicsOpacityEffect
 )
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QPalette
+
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QToolButton, QSizePolicy, QToolTip, QMessageBox
 
 
 class AlertBox(QWidget):
+    """
+    Лёгкий алерт (info/warning/success/danger) с плавным появлением.
+    Для kind='danger' показывает кнопку копирования текста в буфер.
+    Сигналы:
+        alertShown(text:str, kind:str)
+        alertCleared()
+    """
+    alertShown = Signal(str, str)
+    alertCleared = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setObjectName("AlertBox")
-        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self._text = ""
+        self._kind = "info"
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        # ОДНА ГОРИЗОНТАЛЬНАЯ СТРОКА: текст + кнопка копирования
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
 
-        self.label = QLabel("")
-        self.label.setWordWrap(True)
-        layout.addWidget(self.label, 1)
-
-        self.close_btn = QPushButton("×")
-        self.close_btn.setFixedWidth(28)
-        self.close_btn.clicked.connect(self.hide_message)
-        layout.addWidget(self.close_btn, 0, Qt.AlignTop)
-
-        # ВАЖНО: без margin-bottom и без рамки (бордера)
-        self.setStyleSheet("""
-            QWidget#AlertBox {
-                padding: 12px;
-                border: none;
-                border-radius: 4px;
-                background-color: #cce5ff;
-            }
-            QWidget#AlertBox QLabel {
-                color: #004085;
-                font-size: 14px;
-                background: transparent;
-            }
-            QWidget#AlertBox QPushButton {
-                border: none;
-                background: transparent;
-                font-size: 18px;
-                color: #383d41;
-                padding: 0 6px;
-            }
-            QWidget#AlertBox QPushButton:hover {
-                background-color: #b8daff;
+        self._card = QWidget(self)
+        self._card.setObjectName("AlertCard")
+        self._card.setStyleSheet("""
+            QWidget#AlertCard {
+                background-color: #cce5ff; /* info */
                 border-radius: 12px;
             }
         """)
+        card_l = QHBoxLayout(self._card)
+        card_l.setContentsMargins(12, 10, 12, 10)
+        card_l.setSpacing(8)
 
-        self._anim_h = QPropertyAnimation(self, b"maximumHeight", self)
-        self._anim_h.setDuration(220)
-        self._anim_h.setEasingCurve(QEasingCurve.OutCubic)
+        self._label = QLabel("", self._card)
+        self._label.setWordWrap(True)
+        self._label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self._label.setStyleSheet("color: #383d41;")
+        card_l.addWidget(self._label, 1, Qt.AlignVCenter)
 
-        self._fx = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self._fx)
-        self._anim_op = QPropertyAnimation(self._fx, b"opacity", self)
-        self._anim_op.setDuration(200)
-        self._anim_op.setEasingCurve(QEasingCurve.OutCubic)
+        # Кнопка «копировать» — справа, в той же строке
+        self._btn_copy = QToolButton(self._card)
+        self._btn_copy.setText("📋")
+        self._btn_copy.setToolTip("Скопировать текст ошибки")
+        self._btn_copy.setAutoRaise(True)
+        self._btn_copy.setCursor(Qt.PointingHandCursor)
+        self._btn_copy.setStyleSheet(
+            "QToolButton { border: none; color: #383d41; font-size: 16px; padding: 2px 6px; }"
+            "QToolButton:hover { background: rgba(0,0,0,0.06); border-radius: 6px; }"
+        )
+        self._btn_copy.clicked.connect(self._copy_to_clipboard)
+        self._btn_copy.hide()  # только для danger
+        card_l.addWidget(self._btn_copy, 0, Qt.AlignVCenter)
 
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setMaximumHeight(0)
-        self.setVisible(False)
+        row.addWidget(self._card)
 
-        self._hiding = False
-        self._anim_h.finished.connect(self._maybe_hide)
+        # анимация появления
+        self._anim = QPropertyAnimation(self, b"windowOpacity", self)
+        self._anim.setDuration(180)
+        self._anim.setEasingCurve(QEasingCurve.InOutCubic)
 
-    def show_message(self, text: str):
-        self.label.setText(text or "")
-        self.setVisible(True)
-        self._hiding = False
+        self.hide()
 
-        self._anim_h.stop()
-        self._anim_h.setStartValue(0)
-        self._anim_h.setEndValue(max(1, self.sizeHint().height()))
-        self._anim_h.start()
+    # API
+    def show_message(self, text: str, kind: str = "info"):
+        if not text:
+            self.clear(); return
+        self._text = text
+        self._kind = kind or "info"
 
-        self._anim_op.stop()
-        self._fx.setOpacity(0.0)
-        self._anim_op.setStartValue(0.0)
-        self._anim_op.setEndValue(1.0)
-        self._anim_op.start()
+        if self._kind == "danger":
+            bg, fg = "#f8d7da", "#842029"
+        elif self._kind == "warning":
+            bg, fg = "#fff3cd", "#664d03"
+        elif self._kind == "success":
+            bg, fg = "#d1e7dd", "#0f5132"
+        else:
+            bg, fg = "#cce5ff", "#383d41"
 
-    def hide_message(self):
-        self._hiding = True
-        self._anim_h.stop()
-        self._anim_h.setStartValue(max(1, self.height()))
-        self._anim_h.setEndValue(0)
-        self._anim_h.start()
+        self._card.setStyleSheet(f"""
+            QWidget#AlertCard {{
+                background-color: {bg};
+                border-radius: 12px;
+            }}
+        """)
+        self._label.setStyleSheet(f"color: {fg};")
+        self._label.setText(text)
+        self._btn_copy.setVisible(self._kind == "danger")
 
-        self._anim_op.stop()
-        self._anim_op.setStartValue(1.0)
-        self._anim_op.setEndValue(0.0)
-        self._anim_op.start()
+        self.setWindowOpacity(0.0)
+        self.show()
+        self._anim.stop()
+        self._anim.setStartValue(0.0)
+        self._anim.setEndValue(1.0)
+        self._anim.start()
 
-    def _maybe_hide(self):
-        if self._hiding and self.maximumHeight() == 0:
-            self.setVisible(False)
+        self.alertShown.emit(self._text, self._kind)
+
+    def show_error(self, text: str):
+        self.show_message(text, "danger")
+
+    def clear(self):
+        self._text = ""
+        self._kind = "info"
+        self.hide()
+        self.alertCleared.emit()
+
+    def _copy_to_clipboard(self):
+        if self._text:
+            QGuiApplication.clipboard().setText(self._text)
+            # всплывающий тултип рядом с кнопкой
+            pos = self._btn_copy.mapToGlobal(self._btn_copy.rect().center())
+            QToolTip.showText(pos, "Ошибка скопирована в буфер обмена", self._btn_copy)
 
 
 class DangerOverlay(QWidget):
     """
     Полупрозрачный фон + большая danger-плашка.
+    Кнопки в одной строке: слева «Копировать текст ошибки», справа «Вернуться к настройкам подключения».
     """
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -131,10 +153,24 @@ class DangerOverlay(QWidget):
         self.label.setWordWrap(True)
         panel_l.addWidget(self.label, 1)
 
-        self.btn = QPushButton("вернуться к настройкам подключения")
+        # --- Ряд кнопок: слева «Копировать», справа «Вернуться» ---
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(10)
+
+        self.btn_copy = QPushButton("Копировать текст ошибки")
+        self.btn_copy.setCursor(Qt.PointingHandCursor)
+        self.btn_copy.clicked.connect(self._copy_error)
+        btn_row.addWidget(self.btn_copy, 0, Qt.AlignLeft)
+
+        btn_row.addStretch(1)
+
+        self.btn = QPushButton("Вернуться к настройкам подключения")
         self.btn.setMinimumHeight(38)
+        self.btn.setCursor(Qt.PointingHandCursor)
         self.btn.clicked.connect(self._go_back)
-        panel_l.addWidget(self.btn, 0, Qt.AlignRight)
+        btn_row.addWidget(self.btn, 0, Qt.AlignRight)
+
+        panel_l.addLayout(btn_row)
 
         # danger-стили с фоном, без влияния глобального
         self.panel.setStyleSheet("""
@@ -154,7 +190,7 @@ class DangerOverlay(QWidget):
                 color: #FFFFFF;
                 border: none;
                 border-radius: 6px;
-                padding: 8px 14px;   /* комфортные внутренние отступы */
+                padding: 8px 14px;
                 font-weight: 600;
             }
             QWidget#DangerPanel QPushButton:hover { background: #6c1b22; }
@@ -183,6 +219,13 @@ class DangerOverlay(QWidget):
 
     def hide_overlay(self):
         self.setVisible(False)
+
+    def _copy_error(self):
+        text = self.label.text() if hasattr(self, "label") else ""
+        if text:
+            QGuiApplication.clipboard().setText(text)
+            # системное диалоговое окно
+            QMessageBox.information(self, "Скопировано", "Ошибка скопирована в буфер обмена")
 
     def _go_back(self):
         self.hide_overlay()

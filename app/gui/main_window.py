@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QIcon, QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QStackedWidget, QHBoxLayout, QVBoxLayout,
-    QLabel, QPushButton, QApplication
+    QLabel, QPushButton, QApplication, QToolTip
 )
 
 from resources import ASSETS_DIR
@@ -128,6 +128,17 @@ class MainWindow(QMainWindow):
         sb = self.statusBar()
         sb.setStyleSheet("QStatusBar{background:#1f1a12;color:#fff;} QLabel{color:#fff;}")
         self._status_label = QLabel("")
+
+        # кнопка копирования ошибки в статус-баре (появляется при ошибке)
+        self._btn_copy_err = QPushButton("📋")
+        self._btn_copy_err.setToolTip("Скопировать текст ошибки")
+        self._btn_copy_err.setVisible(False)
+        self._btn_copy_err.setCursor(Qt.PointingHandCursor)
+        self._btn_copy_err.setStyleSheet("QPushButton { border:none; color:#fff; font-size:16px; padding:2px 6px; }"
+                                        "QPushButton:hover { background: rgba(255,255,255,0.12); border-radius:6px; }")
+        sb.addPermanentWidget(self._btn_copy_err, 0)
+        self._last_status_error = ""
+        self._btn_copy_err.clicked.connect(lambda: QApplication.clipboard().setText(self._last_status_error or ""))
         sb.addWidget(self._status_label, 1)  # растягиваем на ширину окна
         self._status_anim_timer = QTimer(self)
         self._status_anim_timer.setInterval(400)
@@ -320,6 +331,8 @@ class MainWindow(QMainWindow):
                 err = getattr(self.store, "last_error", None) or "Не удалось подключиться. Проверьте параметры."
                 self.stack.setCurrentWidget(self.connection_tab)
                 self.connection_tab.show_connect_error(err)
+
+                self._last_status_error = str(err)
                 self._set_status("error", f"Ошибка подключения: {err}")
         finally:
             self._connect_job_active = False
@@ -449,6 +462,12 @@ class MainWindow(QMainWindow):
         if mode_changed:
             self._status_dots = 0
         self._status_text_base = base_text
+
+        # показать кнопку копирования только при ошибке
+        if mode == "error":
+            self._btn_copy_err.setVisible(True)
+        else:
+            self._btn_copy_err.setVisible(False)
 
         color = {
             "connected": "#27ae60",
