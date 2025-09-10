@@ -19,7 +19,7 @@ HOME_SCREEN = {
 
 # Экран выбора подключения
 CONNECTION_SCREEN = {
-    "title": "Выберите тип подключения",
+    "title": "Выберите интерфейс связи с источником (RTU/TCP).",
     "hint": "RTU — через последовательный порт, Wi-Fi — Modbus TCP.",
     "types": ["RTU", "Wi-Fi (TCP)"],
     "back_btn": "Назад",

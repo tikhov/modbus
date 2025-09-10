@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSizePolicy
 )
@@ -28,19 +28,19 @@ class ConnectionTab(QWidget):
         self._current_type = "RTU"
         self._panel: SettingsPanel | None = None
         self._is_connected = False
+        self._observed_card: QWidget | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.setSpacing(12)
 
-        # --- Заголовок вкладки (сам заголовок полосы сверху теперь делает MainWindow) ---
+        # --- Заголовок вкладки (полоса сверху рисует MainWindow) ---
         title = QLabel(CONNECTION_SCREEN.get("title", "Подключение к источнику"))
         title.setAlignment(Qt.AlignCenter)
         title.setProperty("role", "title")
         root.addWidget(title)
 
-        # ---------------- ПЛАШКА ВЫБОРА ТИПА (такая же ширина, как у формы настроек) ----------------
-        # Оборачиваем в горизонтальный контейнер со стретчами, чтобы центрировать.
+        # ---------------- ПЛАШКА ВЫБОРА ТИПА ----------------
         type_card_row = QHBoxLayout()
         type_card_row.setContentsMargins(0, 0, 0, 0)
         type_card_row.setSpacing(0)
@@ -48,11 +48,19 @@ class ConnectionTab(QWidget):
 
         self._type_card = QWidget(objectName="ConnTypeCard")
         self._type_card.setStyleSheet("""
-            QWidget#ConnTypeCard {
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.10);
-                border-radius: 12px;
+            QWidget {
+                background: #3B2F22;
+                border-radius: 8px;
             }
+            QLabel { color: #ffffff; }
+            QLineEdit, QComboBox {
+                background: #453D31;
+                color: #FFFFFF;
+                border-radius: 6px;
+                padding: 6px 8px;
+                min-height: 28px;
+            }
+            QComboBox::drop-down { border: none; }
         """)
         self._type_card.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Maximum)
 
@@ -63,23 +71,22 @@ class ConnectionTab(QWidget):
         # Заголовок секции
         sec_title = QLabel(CONNECTION_SCREEN.get("type_title", "Тип подключения"))
         sec_title.setStyleSheet("color:#fff; font-size:14px; font-weight:700;")
+        sec_title.setAlignment(Qt.AlignCenter)
         card_l.addWidget(sec_title)
 
-        # Ряд: селектор типа + «?»
+        # Ряд: селектор типа + «?» (центр)
         type_row = QHBoxLayout()
         type_row.setSpacing(8)
+        type_row.setAlignment(Qt.AlignCenter)
 
-        # Селектор: используем те же маркеры, что у селектора профиля, чтобы подхватился ваш QSS
         self.type_box = QComboBox()
         self.type_box.addItems(CONNECTION_SCREEN.get("types", ["RTU (RS-485)", "TCP (Modbus/TCP)"]))
-        self.type_box.setObjectName("ProfileCombo")  # как у селектора профиля
-        self.type_box.setProperty("form", "1")       # как у полей формы
+        self.type_box.setObjectName("ProfileCombo")
+        self.type_box.setProperty("form", "1")
         self.type_box.setMinimumWidth(320)
         self.type_box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.type_box.currentIndexChanged.connect(self._type_changed)
-        type_row.addWidget(self.type_box, 1, Qt.AlignLeft)
 
-        # «?» — подсказка внутри той же плашки
         help_btn = QLabel("?")
         help_btn.setObjectName("HelpDot")
         help_btn.setFixedSize(24, 24)
@@ -97,12 +104,15 @@ class ConnectionTab(QWidget):
         help_btn.mousePressEvent = lambda e: self.alert.show_message(
             CONNECTION_SCREEN.get("type_tooltip", "Выберите интерфейс связи с источником (RTU/TCP).")
         )
-        type_row.addWidget(help_btn, 0, Qt.AlignLeft)
+
+        type_row.addStretch(1)
+        type_row.addWidget(self.type_box, 0, Qt.AlignVCenter)
+        type_row.addWidget(help_btn, 0, Qt.AlignVCenter)
         type_row.addStretch(1)
 
         card_l.addLayout(type_row)
 
-        # AlertBox ТЕПЕРЬ внутри плашки (как просил)
+        # AlertBox — внутри плашки
         self.alert = AlertBox()
         card_l.addWidget(self.alert)
 
@@ -113,12 +123,19 @@ class ConnectionTab(QWidget):
         # ---------------- SettingsPanel ----------------
         self._mount_panel(self._current_type)
 
-        # Синхронизируем ширины плашек (после раскладки)
+        # Стартовая синхронизация ширины после раскладки
         QTimer.singleShot(0, self._sync_card_widths)
 
     # заменить панель при смене типа
     def _mount_panel(self, conn_type: str):
         if self._panel is not None:
+            # снять наблюдатель со старой карточки
+            if self._observed_card is not None:
+                try:
+                    self._observed_card.removeEventFilter(self)
+                except Exception:
+                    pass
+                self._observed_card = None
             self.layout().removeWidget(self._panel)
             self._panel.setParent(None)
             self._panel.deleteLater()
@@ -129,12 +146,26 @@ class ConnectionTab(QWidget):
             on_back=lambda: None,
             on_connect=self._handle_connect_button
         )
-        # В SettingsPanel его «карточка» обычно имеет objectName "FormCard" и центрируется самим классом.
         self.layout().addWidget(self._panel, 1)
         self._sync_connect_btn_text()
 
-        # После замены панели — подогнать ширины
+        # Привязываем наблюдатель к фактической карточке настроек
+        form_card = getattr(self._panel, "card", None)
+        if form_card is not None:
+            self._observed_card = form_card
+            form_card.installEventFilter(self)
+
         QTimer.singleShot(0, self._sync_card_widths)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        QTimer.singleShot(0, self._sync_card_widths)
+
+    def eventFilter(self, obj, ev):
+        # как только карточка настроек получила размер/перелэйаутилась — выровняем ширину
+        if obj is self._observed_card and ev.type() in (QEvent.Resize, QEvent.Show, QEvent.LayoutRequest):
+            self._sync_card_widths()
+        return super().eventFilter(obj, ev)
 
     def _type_changed(self, idx: int):
         text = self.type_box.currentText()
@@ -164,7 +195,6 @@ class ConnectionTab(QWidget):
     def _sync_connect_btn_text(self):
         if self._panel is None:
             return
-        # В твоём SettingsPanel кнопка называется self.connect_btn
         btn = getattr(self._panel, "connect_btn", None)
         if btn is not None:
             btn.setText("Отключить" if self._is_connected else "Подключиться")
@@ -174,21 +204,18 @@ class ConnectionTab(QWidget):
         if self._panel is not None:
             self._panel.show_connect_error(text or "Не удалось подключиться к источнику.")
 
-    # ---- сделать одинаковую ширину плашек (тип подключения == форма настроек) ----
+    # ---- одинаковая ширина плашек (тип подключения == форма настроек) ----
     def _sync_card_widths(self):
         if self._panel is None:
             return
-        # Пытаемся найти карточку формы внутри SettingsPanel
-        form_card = self._panel.findChild(QWidget, "FormCard")
-        if form_card is None:
-            # если нет объекта по имени — используем ширину самой панели
-            w = max(640, self._panel.width() or self._panel.sizeHint().width())
-        else:
-            # берём фактическую ширину карточки
-            w = form_card.width() or form_card.sizeHint().width() or form_card.maximumWidth()
+        form_card = getattr(self._panel, "card", None)
+        if form_card:
+            w = form_card.width() or form_card.sizeHint().width()
+            # если ещё не измерен — считаем по такой же формуле, как в SettingsPanel
             if not w or w <= 0:
-                w = 760  # запасной дефолт
-        # Применяем ту же ширину и центрируем (контейнер уже центрирует)
+                w = int(max(420, min(900, self._panel.width() * 0.5)))
+        else:
+            w = int(max(420, min(900, self.width() * 0.5)))
         if w and w > 0:
             self._type_card.setFixedWidth(int(w))
 

@@ -35,8 +35,8 @@ class LeftNav(QWidget):
                 padding-right: 5px;
                 margin-left: 0px;
                 margin-right: 0px;
-                margin-top: 5px;
-                margin-bottom: 5px;
+                margin-top: 10px;
+                margin-bottom: 10px;
             }}
             QToolButton[leftnav="1"]:hover {{
                 background: rgba(255,255,255,0.08);

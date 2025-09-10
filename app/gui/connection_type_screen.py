@@ -64,12 +64,12 @@ class ConnectionTypeScreen(QWidget):
         v.addWidget(hint)
 
         buttons = QHBoxLayout()
-        back_btn = QPushButton(CONNECTION_SCREEN["back_btn"])
-        back_btn.clicked.connect(self.on_back)
+        # back_btn = QPushButton(CONNECTION_SCREEN["back_btn"])
+        # back_btn.clicked.connect(self.on_back)
         next_btn = QPushButton(CONNECTION_SCREEN["next_btn"])
         next_btn.clicked.connect(self._go_next)
         buttons.addStretch()
-        buttons.addWidget(back_btn)
+        #buttons.addWidget(back_btn)
         buttons.addWidget(next_btn)
         v.addLayout(buttons)
 

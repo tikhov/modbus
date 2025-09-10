@@ -205,15 +205,15 @@ class SettingsPanel(QWidget):
         self.connect_btn.setMinimumHeight(34)
         self.connect_btn.clicked.connect(self._connect)
 
-        back_btn = QPushButton(SETTINGS_SCREEN["back_btn"])
-        back_btn.setStyleSheet(BTN_STYLE)
-        back_btn.setMinimumHeight(34)
-        back_btn.clicked.connect(self.on_back)
+        # back_btn = QPushButton(SETTINGS_SCREEN["back_btn"])
+        # back_btn.setStyleSheet(BTN_STYLE)
+        # back_btn.setMinimumHeight(34)
+        # back_btn.clicked.connect(self.on_back)
 
         btns.addWidget(self.save_btn)
         btns.addWidget(self.connect_btn)
         btns.addStretch()
-        btns.addWidget(back_btn)
+        # btns.addWidget(back_btn)
         v.addLayout(btns)
 
         center_row.addWidget(self.card)
