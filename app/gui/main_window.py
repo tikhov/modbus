@@ -71,7 +71,8 @@ class MainWindow(QMainWindow):
         self.home_widget = self._create_home_widget()     # 0 — Домик
         self.program_widget = ProgramScreen()             # 1 — Программный режим (заглушка)
         self.connection_tab = ConnectionTab(              # 2 — Подключение (селектор + SettingsPanel)
-            on_connect=self.on_connect
+            on_connect=self.on_connect,
+            on_disconnect=self.on_disconnect
         )
         self.settings_screen = SettingsScreen()           # 3 — Настройки (заглушка)
         self.info_widget = InfoScreen()                   # 4 — Инфо
@@ -95,6 +96,23 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
 
         self._apply_main_style()
+
+        # ---- Статус-бар подключения ----
+        sb = self.statusBar()
+        sb.setStyleSheet("QStatusBar{background:#1f1a12;color:#fff;} QLabel{color:#fff;}")
+        self._status_label = QLabel("")
+        sb.addWidget(self._status_label)
+        self._status_anim_timer = QTimer(self)
+        self._status_anim_timer.setInterval(400)
+        self._status_anim_timer.timeout.connect(self._animate_status_dots)
+        self._status_mode = "disconnected"    # connected | connecting | reconnecting | error | disconnected
+        self._status_dots = 0
+        self._status_text_base = "Отключено"
+        self._render_status("Отключено", color="#bdc3c7")
+
+        # Флаг выполнения подключения (чтобы не запускать повторно)
+        self._connect_job_active = False
+        self._pending_conn: tuple[str, dict] | None = None
 
         # Сигналы стора
         self.store.connectionChanged.connect(self._on_connection_changed)
@@ -142,11 +160,11 @@ class MainWindow(QMainWindow):
         v.setContentsMargins(24, 24, 24, 24)
         v.setSpacing(16)
 
-        # Титульная надпись
-        title = QLabel(HOME_SCREEN.get("title", ""))
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 18px; color: #fff;")
-        v.addWidget(title)
+        # Титульная надпись/подсказка: скрываем при подключении
+        self.lbl_home_hint = QLabel(HOME_SCREEN.get("title", ""))
+        self.lbl_home_hint.setAlignment(Qt.AlignCenter)
+        self.lbl_home_hint.setStyleSheet("font-size: 18px; color: #fff;")
+        v.addWidget(self.lbl_home_hint)
 
         # Крупные показания
         self.lbl_voltage = QLabel("0,0 В")
@@ -236,24 +254,58 @@ class MainWindow(QMainWindow):
         # По ТЗ — все вкладки активны всегда
         self.left.set_enabled_tabs(home=True, program=True, source=True, settings=True, info=True)
 
-    # ---------- подключение ----------
+    # ---------- подключение / отключение ----------
     def on_connect(self, conn_type: str, settings: dict):
-        ok = self.source.connect(conn_type, settings)
-        if ok:
-            # Подключились — запускаем таймер, но источник НЕ включаем автоматически
-            self._start_epoch = time.time()
+        # Уже идёт задача подключения — игнор
+        if self._connect_job_active:
+            return
+        self._connect_job_active = True
+        self._pending_conn = (conn_type, settings)
+
+        # Показать активность «Подключение…»
+        self._set_status("connecting", "Подключение")
+
+        # Дать UI прорисоваться и запустить блокирующий connect асинхронно
+        QTimer.singleShot(50, self._do_connect)
+
+    def _do_connect(self):
+        try:
+            conn_type, settings = self._pending_conn or ("RTU", {})
+            ok = self.source.connect(conn_type, settings)
+            if ok:
+                # Подключились — запускаем таймер, но источник НЕ включаем автоматически
+                self._start_epoch = time.time()
+                self._elapsed = 0
+                self._run_timer.start()
+                self.power_state = "ready"
+                self._update_power_icon()
+                self.btn_power.setEnabled(True)
+                self._apply_connected_ui(True)
+                self.connection_tab.set_connected(True)   # обновить подпись кнопки
+                self._on_nav("home")
+                self._set_status("connected", f"Подключено ({conn_type})")
+            else:
+                # Ошибка — показать алерт на вкладке «Подключение» и статус-бар
+                err = getattr(self.store, "last_error", None) or "Не удалось подключиться. Проверьте параметры."
+                self.stack.setCurrentWidget(self.connection_tab)
+                self.connection_tab.show_connect_error(err)
+                self._set_status("error", f"Ошибка подключения: {err}")
+        finally:
+            self._connect_job_active = False
+            self._pending_conn = None
+
+    def on_disconnect(self):
+        try:
+            if hasattr(self.source, "disconnect"):
+                self.source.disconnect()
+        finally:
+            # UI в режим «отключено»
+            self._run_timer.stop()
+            self._start_epoch = None
             self._elapsed = 0
-            self._run_timer.start()
-            self.power_state = "ready"
-            self._update_power_icon()
-            self.btn_power.setEnabled(True)
-            self._apply_connected_ui(True)
-            self._on_nav("home")
-        else:
-            # Ошибка — показать алерт на вкладке «Подключение»
-            err = getattr(self.store, "last_error", None) or "Не удалось подключиться. Проверьте параметры."
-            self.stack.setCurrentWidget(self.connection_tab)
-            self.connection_tab.show_connect_error(err)
+            self._apply_connected_ui(False)
+            self.connection_tab.set_connected(False)
+            self._set_status("disconnected", "Отключено")
 
     def _on_connection_changed(self, connected: bool):
         if not connected:
@@ -269,13 +321,24 @@ class MainWindow(QMainWindow):
             self.lbl_ah.setText("0 А·ч")
             self.btn_power.setEnabled(False)
             self._apply_connected_ui(False)
+            self.connection_tab.set_connected(False)
+            # Предполагаем, что сервис пробует переподключаться в фоне
+            self._set_status("reconnecting", "Переподключение")
+        else:
+            self.connection_tab.set_connected(True)
+            self._set_status("connected", "Подключено")
 
     # ---------- синхронизация вида по подключению ----------
     def _apply_connected_ui(self, connected: bool):
+        # Надпись-подсказка убираем при подключении
+        if hasattr(self, "lbl_home_hint"):
+            self.lbl_home_hint.setVisible(not connected)
+
         if hasattr(self, "btn_connect_big"):
             self.btn_connect_big.setVisible(not connected)
         if hasattr(self, "bottom_container"):
             self.bottom_container.setVisible(connected)
+
         # вкладки включены всегда
         self._apply_nav_enabled(connected)
 
@@ -348,3 +411,49 @@ class MainWindow(QMainWindow):
         if not ok:
             self.power_state = old_state
             self._update_power_icon()
+
+    # ---------- статус-бар ----------
+    def _render_status(self, text: str, color: str):
+        dot = f'<span style="color:{color};">●</span>'
+        self._status_label.setText(f'{dot} {text}')
+
+    def _set_status(self, mode: str, base_text: str):
+        """
+        mode: connected | connecting | reconnecting | error | disconnected
+        base_text: без бегущих точек (например, "Подключение" / "Переподключение")
+        """
+        mode_changed = (mode != self._status_mode)
+        self._status_mode = mode
+        if mode_changed:
+            self._status_dots = 0
+        self._status_text_base = base_text
+
+        color = {
+            "connected": "#27ae60",
+            "connecting": "#f1c40f",
+            "reconnecting": "#f1c40f",
+            "error": "#e74c3c",
+            "disconnected": "#bdc3c7",
+        }.get(mode, "#bdc3c7")
+
+        if mode in ("connecting", "reconnecting"):
+            if not self._status_anim_timer.isActive():
+                self._status_anim_timer.start()
+        else:
+            if self._status_anim_timer.isActive():
+                self._status_anim_timer.stop()
+
+        text = self._status_text_base
+        if mode in ("connecting", "reconnecting"):
+            text += "." * max(1, self._status_dots or 1)
+        self._render_status(text, color)
+
+    def _animate_status_dots(self):
+        # 1 -> 2 -> 3 -> 1
+        self._status_dots = (self._status_dots % 3) + 1
+        color = {
+            "connecting": "#f1c40f",
+            "reconnecting": "#f1c40f",
+        }.get(self._status_mode, "#bdc3c7")
+        text = self._status_text_base + ("." * self._status_dots)
+        self._render_status(text, color)

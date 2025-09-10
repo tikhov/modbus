@@ -1,25 +1,30 @@
-
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox
+
 from dictionary import CONNECTION_SCREEN
 from .widgets import AlertBox
 from .settings_panel import SettingsPanel
+
 
 class ConnectionTab(QWidget):
     """
     Единая вкладка «Подключение»:
     - сверху селектор типа подключения (в стиле из настроек — без карточек мастера)
     - ниже — сам SettingsPanel (RTU/TCP) со всеми профилями, «?» и подсказками (AlertBox).
+    - если уже подключено — кнопка в SettingsPanel меняется на «Отключить».
     """
-    connectRequested = Signal(str, dict)  # (conn_type, settings)
+    connectRequested = Signal(str, dict)   # (conn_type, settings)
+    disconnectRequested = Signal()         # () — запрос на отключение
 
-    def __init__(self, on_connect=None, parent=None):
+    def __init__(self, on_connect=None, on_disconnect=None, parent=None):
         super().__init__(parent)
         self._on_connect_cb = on_connect
+        self._on_disconnect_cb = on_disconnect
         self._current_type = "RTU"
         self._panel: SettingsPanel | None = None
+        self._is_connected = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
@@ -43,7 +48,7 @@ class ConnectionTab(QWidget):
         row.addWidget(self.type_box)
 
         help_btn = QLabel("?")
-        help_btn.setObjectName("HelpDot")  # используем тот же стиль, что и в SettingsPanel
+        help_btn.setObjectName("HelpDot")
         help_btn.setFixedSize(24, 24)
         help_btn.setAlignment(Qt.AlignCenter)
         help_btn.setStyleSheet("""
@@ -56,7 +61,6 @@ class ConnectionTab(QWidget):
             }
             QLabel#HelpDot:hover { background: #b8daff; }
         """)
-        # Псевдо-кнопка: клик мыши показывает подсказку
         help_btn.mousePressEvent = lambda e: self.alert.show_message(CONNECTION_SCREEN.get("type_tooltip", ""))
         row.addWidget(help_btn)
 
@@ -78,23 +82,49 @@ class ConnectionTab(QWidget):
             self._panel.deleteLater()
             self._panel = None
 
-        self._panel = SettingsPanel(conn_type=conn_type, on_back=lambda: None, on_connect=self._on_connect)
+        # важно: передаём свой обработчик кнопки
+        self._panel = SettingsPanel(
+            conn_type=conn_type,
+            on_back=lambda: None,
+            on_connect=self._handle_connect_button
+        )
         self.layout().addWidget(self._panel, 1)
+        self._sync_connect_btn_text()
 
     def _type_changed(self, idx: int):
-        # определяем тип по тексту (как в ConnectionTypeScreen)
         text = self.type_box.currentText()
         conn_type = "RTU" if "RTU" in text or "485" in text else "TCP"
         if conn_type != self._current_type:
             self._current_type = conn_type
             self._mount_panel(conn_type)
 
-    # проксируем «Подключиться» наверх
-    def _on_connect(self, conn_type: str, settings: dict):
-        if callable(self._on_connect_cb):
-            self._on_connect_cb(conn_type, settings)
+    # обработчик клика «Подключиться/Отключить»
+    def _handle_connect_button(self, conn_type: str, settings: dict):
+        if self._is_connected:
+            # просим отключить
+            if callable(self._on_disconnect_cb):
+                self._on_disconnect_cb()
+            else:
+                self.disconnectRequested.emit()
         else:
-            self.connectRequested.emit(conn_type, settings)
+            # просим подключить
+            if callable(self._on_connect_cb):
+                self._on_connect_cb(conn_type, settings)
+            else:
+                self.connectRequested.emit(conn_type, settings)
+
+    # Публично из MainWindow: переключить подпись и режим
+    def set_connected(self, connected: bool):
+        self._is_connected = bool(connected)
+        self._sync_connect_btn_text()
+
+    def _sync_connect_btn_text(self):
+        if self._panel is None:
+            return
+        # SettingsPanel хранит кнопку как self.btn_connect (мы её не трогаем, только текст)
+        btn = getattr(self._panel, "btn_connect", None)
+        if btn is not None:
+            btn.setText("Отключить" if self._is_connected else "Подключиться")
 
     # Показ ошибки подключения на вложенной панели
     def show_connect_error(self, text: str):
