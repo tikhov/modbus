@@ -274,11 +274,11 @@ class MainWindow(QMainWindow):
     def _on_nav(self, key: str):
         mapping = {"home": 0, "program": 1, "source": 2, "settings": 3, "info": 4}
         titles = {
-            "home": "Дом",
+            "home": "Домашний экран",
             "program": "Программный режим",
-            "source": "Подключение",
+            "source": "Подключение к источнику",
             "settings": "Настройки",
-            "info": "Инфо",
+            "info": "Информация",
         }
         self.left.set_active(key)
         self.stack.setCurrentIndex(mapping.get(key, 0))
