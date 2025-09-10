@@ -29,7 +29,14 @@ class LeftNav(QWidget):
             QToolButton[leftnav="1"] {{
                 background: transparent;
                 border: none;
-                padding: 0;               /* без внутренних отступов — всё управляет расчёт */
+                padding-top: 20x;
+                padding-bottom: 20x;
+                padding-left: 5px;
+                padding-right: 5px;
+                margin-left: 0px;
+                margin-right: 0px;
+                margin-top: 5px;
+                margin-bottom: 5px;
             }}
             QToolButton[leftnav="1"]:hover {{
                 background: rgba(255,255,255,0.08);
@@ -45,7 +52,7 @@ class LeftNav(QWidget):
             "home":     "home.svg",
             "program":  "chip.svg",
             "source":   "source_arrows.svg",
-            "settings": "set.svg",     # добавь gear.svg в assets/icons
+            "settings": "set.svg",
             "info":     "info.svg",
         }
         self._active = "home"
