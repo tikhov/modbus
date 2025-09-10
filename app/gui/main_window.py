@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QTimer, QSize
 from PySide6.QtGui import QIcon, QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QStackedWidget, QHBoxLayout, QVBoxLayout,
-    QLabel, QPushButton
+    QLabel, QPushButton, QApplication
 )
 
 from resources import ASSETS_DIR
@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
         sb = self.statusBar()
         sb.setStyleSheet("QStatusBar{background:#1f1a12;color:#fff;} QLabel{color:#fff;}")
         self._status_label = QLabel("")
-        sb.addWidget(self._status_label)
+        sb.addWidget(self._status_label, 1)  # растягиваем на ширину
         self._status_anim_timer = QTimer(self)
         self._status_anim_timer.setInterval(400)
         self._status_anim_timer.timeout.connect(self._animate_status_dots)
@@ -150,7 +150,6 @@ class MainWindow(QMainWindow):
 
     # ---------- стили ----------
     def _apply_main_style(self):
-        # Границу на правой области НЕ ставим, её роль берёт на себя self.divider.
         self.stack.setStyleSheet(f"QWidget#RightStack {{ background: {APP_BG}; }}")
 
     # ---------- построение Домика ----------
@@ -251,7 +250,6 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(mapping.get(key, 0))
 
     def _apply_nav_enabled(self, connected: bool):
-        # По ТЗ — все вкладки активны всегда
         self.left.set_enabled_tabs(home=True, program=True, source=True, settings=True, info=True)
 
     # ---------- подключение / отключение ----------
@@ -262,11 +260,12 @@ class MainWindow(QMainWindow):
         self._connect_job_active = True
         self._pending_conn = (conn_type, settings)
 
-        # Показать активность «Подключение…»
+        # Показать активность «Подключение…» и ПРОРИСОВАТЬ немедленно
         self._set_status("connecting", "Подключение")
+        QApplication.processEvents()  # дать статус-бару перерисоваться
 
-        # Дать UI прорисоваться и запустить блокирующий connect асинхронно
-        QTimer.singleShot(50, self._do_connect)
+        # Запустить блокирующее подключение после возврата в цикл событий
+        QTimer.singleShot(0, self._do_connect)
 
     def _do_connect(self):
         try:
@@ -330,7 +329,6 @@ class MainWindow(QMainWindow):
 
     # ---------- синхронизация вида по подключению ----------
     def _apply_connected_ui(self, connected: bool):
-        # Надпись-подсказка убираем при подключении
         if hasattr(self, "lbl_home_hint"):
             self.lbl_home_hint.setVisible(not connected)
 
@@ -339,7 +337,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, "bottom_container"):
             self.bottom_container.setVisible(connected)
 
-        # вкладки включены всегда
         self._apply_nav_enabled(connected)
 
     # ---------- показания ----------

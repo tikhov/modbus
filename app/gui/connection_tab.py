@@ -121,8 +121,7 @@ class ConnectionTab(QWidget):
     def _sync_connect_btn_text(self):
         if self._panel is None:
             return
-        # SettingsPanel хранит кнопку как self.btn_connect (мы её не трогаем, только текст)
-        btn = getattr(self._panel, "btn_connect", None)
+        btn = getattr(self._panel, "connect_btn", None)
         if btn is not None:
             btn.setText("Отключить" if self._is_connected else "Подключиться")
 
