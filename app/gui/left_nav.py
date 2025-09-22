@@ -54,6 +54,7 @@ class LeftNav(QWidget):
             "source":   "source_arrows.svg",
             "settings": "set.svg",
             "info":     "info.svg",
+            "lock":     "lock.svg",
         }
         self._active = "home"
 
@@ -72,6 +73,7 @@ class LeftNav(QWidget):
 
         # нижняя кнопка (инфо)
         self._add_nav_item("info")
+        self._add_nav_item("lock")
 
         # сигналы
         for key in self._defs.keys():
@@ -175,9 +177,10 @@ class LeftNav(QWidget):
         self._update_icon_metrics()
 
     # массовое включение/отключение вкладок
-    def set_enabled_tabs(self, *, home=True, program=True, source=True, settings=True, info=True):
+    def set_enabled_tabs(self, *, home=True, program=True, source=True, settings=True, info=True, lock=True):
         self._items["home"]["btn"].setEnabled(home)
         self._items["program"]["btn"].setEnabled(program)
         self._items["source"]["btn"].setEnabled(source)
         self._items["settings"]["btn"].setEnabled(settings)
         self._items["info"]["btn"].setEnabled(info)
+        self._items["lock"]["btn"].setEnabled(lock)

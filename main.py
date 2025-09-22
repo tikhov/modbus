@@ -1,22 +1,32 @@
 import sys
 from PySide6.QtWidgets import QApplication
-from app.db import init_db
+from PySide6.QtCore import QTimer
+
 from app.gui.main_window import MainWindow
+from app.gui.splash import SplashScreen
+from app.db import init_db
+
 
 def main():
-    init_db()
     app = QApplication(sys.argv)
-    with open('app/gui/style.qss', 'r', encoding='utf-8') as f:
-        app.setStyleSheet(f.read())
-    # лёгкая тема/скейл по желанию
-    app.setStyleSheet("""
-        QLabel { font-size: 14px; }
-        QPushButton { font-size: 14px; }
-    """)
-    w = MainWindow()
-    # w.show() — не обязательно, т.к. в MainWindow я вызываю showMaximized()
-    w.show()   # оставим, на всякий случай
+    init_db()
+
+    splash = SplashScreen()
+    splash.show()
+    splash.start_fade_in()
+
+    def start_main():
+        def show_main():
+            window = MainWindow()
+            window.show()
+            splash.close()
+        splash.start_fade_out(on_finished=show_main)
+
+    # 2000 мс (2 сек) до начала fade out
+    QTimer.singleShot(2000, start_main)
+
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()
