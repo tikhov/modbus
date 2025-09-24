@@ -23,7 +23,7 @@ class SplashScreen(QWidget):
 
         screen = QApplication.primaryScreen()
         size = screen.size()
-        self.setFixedSize(int(size.width() * 0.8), int(size.height() * 0.8))
+        self.setFixedSize(int(size.width() * 1), int(size.height() * 1))
 
         # --- Поведение окна ---
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)

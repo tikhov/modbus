@@ -41,7 +41,6 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Power Source Controller")
-        self.resize(1200, 800)
         self.setMinimumSize(1000, 650)
 
         # Сервисы
@@ -49,7 +48,7 @@ class MainWindow(QMainWindow):
         self.source = SourceController(self.store, self)
 
         # Состояния экрана
-        self._is_fullscreen = False
+        self._is_fullscreen = True
         self._display_swap_iv = False
         self.power_state = "ready"     # "ready" | "on" | "stop"
 
