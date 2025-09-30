@@ -220,18 +220,37 @@ class MainWindow(QMainWindow):
         self.lbl_home_hint.setStyleSheet("font-size: 18px; color: #fff;")
         v.addWidget(self.lbl_home_hint)
 
-        self.lbl_voltage = QLabel("0,0 В")
-        self.lbl_current = QLabel("0,0 А")
-        for l in (self.lbl_voltage, self.lbl_current):
-            l.setAlignment(Qt.AlignCenter)
-        self.lbl_voltage.setStyleSheet(f"color:{WHITE}; font-size:180px; font-weight:800;")
-        self.lbl_current.setStyleSheet(f"color:{ACCENT}; font-size:160px; font-weight:800;")
-
+        # --- Напряжение с кнопками + и - ---
+        self.lbl_voltage = QLabel("0,0 В")  # измерение
+        self.lbl_voltage.setAlignment(Qt.AlignCenter)
+        self.lbl_voltage_dup = QLabel("0,0 В")  # уставка
+        voltage_layout = self._create_adjustable_value_layout(
+            label=self.lbl_voltage,
+            label_style=f"color:{WHITE}; font-size:180px; font-weight:800;",
+            duplicate_label=self.lbl_voltage_dup,
+            duplicate_style="font-size: 90px; color: #aaa;",
+            on_plus=lambda: self._adjust_voltage(10),
+            on_minus=lambda: self._adjust_voltage(-10)
+        )
         v.addStretch()
-        v.addWidget(self.lbl_voltage)
-        v.addWidget(self.lbl_current)
+        v.addLayout(voltage_layout)
+
+        # --- Ток с кнопками + и - ---
+        self.lbl_current = QLabel("0,0 А")  # измерение
+        self.lbl_current.setAlignment(Qt.AlignCenter)
+        self.lbl_current_dup = QLabel("0,0 А")  # уставка
+        current_layout = self._create_adjustable_value_layout(
+            label=self.lbl_current,
+            label_style=f"color:{ACCENT}; font-size:160px; font-weight:800;",
+            duplicate_label=self.lbl_current_dup,
+            duplicate_style="font-size: 80px; color: #aaa;",
+            on_plus=lambda: self._adjust_current(10),
+            on_minus=lambda: self._adjust_current(-10)
+        )
+        v.addLayout(current_layout)
         v.addStretch()
 
+        # --- Кнопка подключения ---
         cbx = QVBoxLayout()
         self.btn_connect_big = QPushButton(HOME_SCREEN.get("connect_btn", "Подключиться"))
         self.btn_connect_big.setMinimumHeight(48)
@@ -243,6 +262,7 @@ class MainWindow(QMainWindow):
         cbx.addWidget(self.btn_connect_big, alignment=Qt.AlignHCenter)
         v.addLayout(cbx)
 
+        # --- Нижняя панель ---
         self.bottom_container = QWidget()
         bottom = QHBoxLayout(self.bottom_container)
         bottom.setSpacing(40)
@@ -286,6 +306,134 @@ class MainWindow(QMainWindow):
         self._apply_connected_ui(False)
 
         return w
+
+    def _create_adjustable_value_layout(self, label: QLabel, label_style: str, duplicate_label: QLabel, duplicate_style: str, on_plus, on_minus):
+        """
+        Создаёт QVBoxLayout (вместо QHBoxLayout), где:
+        - В строке: кнопка "-", основной label, кнопка "+"
+        - Ниже: duplicate_label (меньше, смещен на 43px от правого края)
+        """
+        # Общий контейнер
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(10)
+
+        # --- Первая строка: кнопки и основной label ---
+        row_layout = QHBoxLayout()
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(10)
+
+        btn_minus = QPushButton()
+        btn_minus.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", "minus.svg")))
+        btn_minus.setFixedSize(180, 180)
+        btn_minus.setIconSize(QSize(40, 40))
+        btn_minus.setStyleSheet(
+            "QPushButton {"
+            "  background: transparent; color: white; font-size: 32px; font-weight: bold; border: none; border-radius: 40px;"
+            "}"
+            "QPushButton:hover {"
+            "  background: transparent;"
+            "}"
+        )
+        btn_minus.clicked.connect(on_minus)
+
+        label.setStyleSheet(label_style)
+        label.setAlignment(Qt.AlignCenter)
+
+        btn_plus = QPushButton()
+        btn_plus.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", "plus.svg")))
+        btn_plus.setIconSize(QSize(40, 40))
+        btn_plus.setFixedSize(180, 180)
+        btn_plus.setStyleSheet(
+            "QPushButton {"
+            "  background: transparent; color: white; font-size: 32px; font-weight: bold; border: none; border-radius: 40px;"
+            "}"
+            "QPushButton:hover {"
+            "  background: transparent;"
+            "}"
+        )
+        btn_plus.clicked.connect(on_plus)
+
+        row_layout.addWidget(btn_minus)
+        row_layout.addWidget(label, 1)  # растягиваем label
+        row_layout.addWidget(btn_plus)
+
+        # --- Дублирующий label с отступом 43px от правого края ---
+        dup_h_layout = QHBoxLayout()
+        dup_h_layout.setContentsMargins(0, 0, 0, 0)
+        dup_h_layout.addStretch()  # растяжение слева (двигает вправо)
+        dup_h_layout.addWidget(duplicate_label)
+        dup_h_layout.addSpacing(430)  # отступ справа (двигает лейбл влево от края)
+
+        duplicate_label.setStyleSheet(duplicate_style)
+
+        # Добавляем строку и дубль в общий layout
+        main_layout.addLayout(row_layout)
+        main_layout.addLayout(dup_h_layout)
+
+        return main_layout
+
+    def _adjust_voltage(self, delta: float):
+        """
+        Изменяет значение в регистре напряжения на delta (например, +1 или -1)
+        """
+        if not hasattr(self.source, 'driver') or not self.source.driver:
+            print("Нет активного драйвера для изменения напряжения.")
+            return
+
+        try:
+            # 1. Прочитать текущее значение из регистра
+            current_raw_value = self.source.driver.read_voltage_register()
+            if current_raw_value is None:
+                print("Не удалось прочитать текущее значение напряжения из регистра.")
+                return
+
+
+            new_raw_value = current_raw_value + int(delta)
+
+            # 3. Записать новое значение в регистр
+            success = self.source.driver.write_voltage_register(new_raw_value)
+
+            if success:
+                scaled_new = new_raw_value * 0.1
+                self.lbl_voltage_dup.setText(f"{scaled_new:+.1f} В".replace("+", "").replace(".", ","))
+            else:
+                print("Не удалось записать новое значение напряжения в регистр.")
+
+        except Exception as e:
+            print(f"Ошибка при изменении напряжения: {e}")
+
+    def _adjust_current(self, delta: float):
+        """
+        Изменяет значение в регистре тока на delta (например, +1 или -1)
+        """
+        if not hasattr(self.source, 'driver') or not self.source.driver:
+            print("Нет активного драйвера для изменения тока.")
+            return
+
+        try:
+            # 1. Прочитать текущее значение из регистра
+            current_raw_value = self.source.driver.read_current_register()
+            if current_raw_value is None:
+                print("Не удалось прочитать текущее значение тока из регистра.")
+                return
+
+            new_raw_value = current_raw_value + int(delta)
+
+            # 3. Записать новое значение в регистр
+            success = self.source.driver.write_current_register(new_raw_value)
+
+            if success:
+                # 4. Обновить дублирующий лейбл (уставку тока)
+                scaled_new = new_raw_value * 0.1
+                self.lbl_current_dup.setText(f"{scaled_new:.1f} А".replace(".", ","))
+
+
+            else:
+                print("Не удалось записать новое значение тока в регистр.")
+
+        except Exception as e:
+            print(f"Ошибка при изменении тока: {e}")
 
     # ---------- навигация ----------
     def _on_nav(self, key: str):
@@ -361,6 +509,8 @@ class MainWindow(QMainWindow):
             self._update_power_icon()
             self.lbl_voltage.setText("0,0 В")
             self.lbl_current.setText("0,0 А")
+            self.lbl_voltage_dup.setText("0,0 В")
+            self.lbl_current_dup.setText("0,0 А")
             self.lbl_ah.setText("0 А·ч")
             self.btn_power.setEnabled(False)
             self._apply_connected_ui(False)
@@ -385,10 +535,18 @@ class MainWindow(QMainWindow):
         try:
             v = float(meas.voltage)
             i = float(meas.current)
+            i_i = float(meas.current_i)/10
+            v_i = float(meas.voltage_i)/10
+
             if self._display_swap_iv:
                 v, i = i, v
+
             self.lbl_voltage.setText(f"{v:+.1f} В".replace("+", "").replace(".", ","))
             self.lbl_current.setText(f"{i:.1f} А".replace(".", ","))
+
+            self.lbl_voltage_dup.setText(f"{v_i:+.1f} В".replace("+", "").replace(".", ","))
+            self.lbl_current_dup.setText(f"{i_i:.1f} А".replace(".", ","))
+
             self.lbl_ah.setText(f"{int(meas.ah_counter)} А·ч")
             if getattr(meas, "error_overheat", False) or getattr(meas, "error_mains", False):
                 self.power_state = "stop"
@@ -402,7 +560,6 @@ class MainWindow(QMainWindow):
         except Exception:
             self.lbl_voltage.setText("0,0 В")
             self.lbl_current.setText("0,0 А")
-            self.lbl_ah.setText("0 А·ч")
 
     # ---------- таймер ----------
     def _tick_runtime(self):

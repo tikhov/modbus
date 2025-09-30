@@ -27,7 +27,8 @@ class InputRegs:
 
 # ---- Holding Registers (FC 03 чтение, FC 06/16 запись) ----
 class HoldingRegs:
-    CURRENT_SETPOINT       = 40001  # уставка выходного тока
+    CURRENT_SETPOINT       = 40002  # уставка выходного тока
+    VOLTAGE_SETPOINT       = 40003  # уставка выходного тока
 
 # ---- Биты регистра ошибок (30001) ----
 class ErrorBits:
@@ -52,6 +53,8 @@ def u32_from_words(hi: int, lo: int) -> int:
 class Measurements:
     current: float
     voltage: float
+    current_i: float
+    voltage_i: float
     polarity: int
     ah_counter: int
     temp1: float | None

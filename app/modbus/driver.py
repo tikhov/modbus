@@ -218,6 +218,63 @@ class SourceDriver:
             return None
         return int(regs[0])
 
+    def set_voltage(self, value: float):
+        # масштабировать и записать в регистр напряжения
+        scaled = int(value / SCALE_V)
+        self._write_register(HoldingRegs.VOLTAGE_SETPOINT, scaled)
+
+    def set_current(self, value: float):
+        # масштабировать и записать в регистр тока
+        scaled = int(value / SCALE_I)
+        self._write_register(HoldingRegs.CURRENT_SETPOINT, scaled)
+
+    def read_40001_and_40002(self):
+        from .registry import HoldingRegs  # Импортируем внутри метода или в начале файла
+
+        rr1 = self._read_holding_registers(holding_reg(HoldingRegs.CURRENT_SETPOINT), count=1)
+        rr2 = self._read_holding_registers(holding_reg(HoldingRegs.VOLTAGE_SETPOINT), count=1)
+
+        i = None
+        v = None
+
+        if rr1 and not rr1.isError() and hasattr(rr1, 'registers') and len(rr1.registers) > 0:
+            i = rr1.registers[0]
+
+        if rr2 and not rr2.isError() and hasattr(rr2, 'registers') and len(rr2.registers) > 0:
+            v = rr2.registers[0]
+
+        return i, v
+
+        # --- Чтение/запись конкретных регистров ---
+
+    def read_voltage_register(self) -> Optional[int]:
+        from .registry import HoldingRegs
+        rr = self._read_holding_registers(holding_reg(HoldingRegs.VOLTAGE_SETPOINT), count=1)
+        if rr and not rr.isError() and hasattr(rr, 'registers') and len(rr.registers) > 0:
+            return int(rr.registers[0])
+        return None
+
+    def write_voltage_register(self, value: int) -> bool:
+        rr = self._write_register(holding_reg(HoldingRegs.VOLTAGE_SETPOINT), int(value))
+        success = hasattr(rr, "isError") and not rr.isError()
+        if not success:
+            print(f"Ошибка записи {value} в регистр напряжения {HoldingRegs.VOLTAGE_SETPOINT}")
+
+        return success
+
+    def read_current_register(self) -> Optional[int]:
+        rr = self._read_holding_registers(holding_reg(HoldingRegs.CURRENT_SETPOINT), count=1)
+        if rr and not rr.isError() and hasattr(rr, 'registers') and len(rr.registers) > 0:
+            return int(rr.registers[0])
+        return None
+
+    def write_current_register(self, value: int) -> bool:
+        rr = self._write_register(holding_reg(HoldingRegs.CURRENT_SETPOINT), int(value))
+        success = hasattr(rr, "isError") and not rr.isError()
+        if not success:
+            print(f"Ошибка записи {value} в регистр тока {HoldingRegs.CURRENT_SETPOINT}")
+        return success
+
     # ---------- Inputs ----------
     def read_measurements(self) -> Optional[Measurements]:
         """
@@ -227,6 +284,9 @@ class SourceDriver:
         # I/U
         i_raw = self._read_single_smart(InputRegs.OUTPUT_CURRENT)
         u_raw = self._read_single_smart(InputRegs.OUTPUT_VOLTAGE)
+
+        i, v = self.read_40001_and_40002()
+
         if i_raw is None or u_raw is None:
             return None
 
@@ -274,6 +334,8 @@ class SourceDriver:
         return Measurements(
             current=float(curr),
             voltage=float(volt),
+            current_i=float(i),
+            voltage_i=float(v),
             polarity=int(pol),
             ah_counter=int(ah32),
             temp1=(float(t1) if t1 is not None else None),

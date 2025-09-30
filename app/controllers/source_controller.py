@@ -149,6 +149,16 @@ class SourceController(QObject):
             self.store.last_error = str(e)
             return False
 
+    def set_voltage(self, value: float):
+        # отправить команду в драйвер на изменение напряжения
+        if self.driver:
+            self.driver.set_voltage(value)
+
+    def set_current(self, value: float):
+        # отправить команду в драйвер на изменение тока
+        if self.driver:
+            self.driver.set_current(value)
+
     def disconnect(self):
         """Останавливает опрос и закрывает соединение."""
         self._cleanup()
