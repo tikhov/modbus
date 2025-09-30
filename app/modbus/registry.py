@@ -12,7 +12,7 @@ class Coils:
     INVERTER_ENABLE        = 2      # 00002: 1–включен, 0–выключен
     AH_RESET               = 3      # 00003: 1–сбросить, 0–считать
     CONTROL_MODE_LOCK      = 4      # 00004: 1–заблокировано, 0–разблокировано
-    CONTROL_MODE_INFO      = 5      # 00005: 0–местное, 1–внешнее (read-only по смыслу)
+    CONTROL_MODE_INFO      = 5      # 00005: 0–местное, 1–внешнее
 
 # ---- Input Registers (FC 04) ----
 class InputRegs:
