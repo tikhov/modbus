@@ -213,3 +213,4 @@ profiles.db
 power-controller.zip
 .idea/
 tests/*
+/app/profiles.sqlite3
