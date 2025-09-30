@@ -24,7 +24,7 @@ def main():
         splash.start_fade_out(on_finished=show_main)
 
     # 2000 мс (2 сек) до начала fade out
-    QTimer.singleShot(2000, start_main)
+    QTimer.singleShot(500, start_main)
 
     sys.exit(app.exec())
 

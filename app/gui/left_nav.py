@@ -41,12 +41,10 @@ class LeftNav(QWidget):
                 background: rgba(255,255,255,0.12);
                 border-radius: 10px;
             }}
-            /* Обёртка lock — выходит за границы по ширине */
             QWidget[lock_wrap="true"] {{
                 background: {LOCK_BG};
                 border-top: 3px solid {LOCK_BORDER};
-                margin-left: -10px;
-                margin-right: -10px;
+                padding-top: 10px;
                 margin-bottom: 0px;
                 padding: 0px;
             }}
@@ -54,7 +52,7 @@ class LeftNav(QWidget):
                 background: transparent;
                 border: none;
                 padding: 0px;
-                margin: 0px;
+                margin: 15px;
             }}
         """)
 
@@ -75,7 +73,7 @@ class LeftNav(QWidget):
         self._hold_timer.timeout.connect(self._on_hold_timeout)
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 12, 10, 12)  # отступы для всего, кроме lock (компенсируем через margin)
+        main_layout.setContentsMargins(0, 12, 0, 0)
         main_layout.setSpacing(0)
 
         # Верхние кнопки
@@ -84,7 +82,9 @@ class LeftNav(QWidget):
         main_layout.addStretch()
         # Кнопка info
         self._add_nav_item("info", main_layout)
-        # Кнопка lock — последняя, прибита к низу
+        # Кнопка lock
+        self._lock_icon_locked = os.path.join(ASSETS_DIR, "icons", "lock.svg")
+        self._lock_icon_unlocked = os.path.join(ASSETS_DIR, "icons", "unlock.svg")
         self._add_lock_item(main_layout)
 
         # Подключение сигналов
@@ -123,7 +123,7 @@ class LeftNav(QWidget):
 
     def _add_lock_item(self, layout):
         wrap = QWidget(self)
-        wrap.setProperty("lock_wrap", "true")  # ← для CSS
+        wrap.setProperty("lock_wrap", "true")
         lay = QVBoxLayout(wrap)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
@@ -141,8 +141,15 @@ class LeftNav(QWidget):
 
     # ---------- блокировка ----------
     def _on_lock_pressed(self):
+        lock_path = self._icon_path("lock.svg")
         if not self._locked:
-            self._hold_timer.start(3000)
+            # короткое нажатие → блокировка
+            self.lock_ui()
+            self._lock_btn.setIcon(QIcon(lock_path))
+        else:
+            # если уже заблокировано — ждём удержания
+            self._hold_timer.start(1000)
+
 
     def _on_lock_released(self):
         if self._hold_timer.isActive():
@@ -202,10 +209,11 @@ class LeftNav(QWidget):
             spacer = self._items[key]["spacer"]
             spacer.changeSize(0, bottom_gap)
 
-        # Иконка lock
+        # lock
         lock_icon_size = int(icon_size * 0.9)
+        unlock_path = self._icon_path("unlock.svg")
         lock_path = self._icon_path("lock.svg")
-        self._lock_btn.setIcon(self._white_icon(lock_path, lock_icon_size) if self._locked else QIcon(lock_path))
+        self._lock_btn.setIcon(QIcon(lock_path) if self._locked else QIcon(unlock_path))
         self._lock_btn.setIconSize(QSize(lock_icon_size, lock_icon_size))
 
         self.layout().invalidate()
@@ -228,6 +236,7 @@ class LeftNav(QWidget):
     def lock_ui(self):
         if not self._locked:
             self._locked = True
+            self._lock_btn.setIcon(QIcon(self._lock_icon_locked))  # меняем иконку
             self._apply_active_styles()
             self._update_icon_metrics()
             self.navigate.emit("lock")
@@ -235,6 +244,7 @@ class LeftNav(QWidget):
     def unlock_ui(self):
         if self._locked:
             self._locked = False
+            self._lock_btn.setIcon(QIcon(self._lock_icon_unlocked))
             self._apply_active_styles()
             self._update_icon_metrics()
             self.navigate.emit("unlock")
