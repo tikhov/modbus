@@ -29,6 +29,7 @@ class InputRegs:
 class HoldingRegs:
     CURRENT_SETPOINT       = 40002  # уставка выходного тока
     VOLTAGE_SETPOINT       = 40003  # уставка выходного тока
+    REVERS       = 40004  # уставка выходного тока
 
 # ---- Биты регистра ошибок (30001) ----
 class ErrorBits:

@@ -53,6 +53,12 @@ class SourceHeaderWidget(QWidget):
             print("⚠️ SourceController не передан в SourceHeaderWidget")
             return
         try:
+            old = self.source.driver.read_revers()
+            if old == 1:
+                new = 0
+            else:
+                new = 1
+            self.source.driver.write_revers(new)
             pass
         except Exception as e:
             print(f"❌ Ошибка при чтении регистра: {e}")

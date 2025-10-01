@@ -92,12 +92,18 @@ class SourceTableWidget(QWidget):
             i_i = float(self._meas.current_i) / 10
             v_i = float(self._meas.voltage_i) / 10
             ah_counter = self._meas.ah_counter
+            polarity = self._meas.polarity
 
             v_Text = f"{v:+.1f}".replace("+", "").replace(".", ",")
             i_Text = f"{i:.1f}".replace(".", ",")
 
             i_i_Text = f"{v_i:+.1f}".replace("+", "").replace(".", ",")
             v_i_Text = f"{i_i:.1f}".replace(".", ",")
+
+            if polarity == 1:
+                i_i_Text = f"-{i_i_Text}"
+                v_i_Text = f"-{v_i_Text}"
+
 
             return [["ИПГ 12/4000-380", "1", i_i_Text, v_i_Text, i_Text, v_Text, ah_counter]]
         except Exception as e:

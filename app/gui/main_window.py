@@ -226,11 +226,12 @@ class MainWindow(QMainWindow):
         self.lbl_voltage = QLabel("0,0 В")  # измерение
         self.lbl_voltage.setAlignment(Qt.AlignCenter)
         self.lbl_voltage_dup = QLabel("0,0 В")  # уставка
+
         voltage_layout = self._create_adjustable_value_layout(
             label=self.lbl_voltage,
             label_style=f"color:{WHITE}; font-size:180px; font-weight:800;",
             duplicate_label=self.lbl_voltage_dup,
-            duplicate_style="font-size: 90px; color: #aaa;",
+            duplicate_style="font-size: 80px; color: #aaa;",
             on_plus=lambda: self._adjust_voltage(10),
             on_minus=lambda: self._adjust_voltage(-10)
         )
@@ -535,6 +536,17 @@ class MainWindow(QMainWindow):
             self.bottom_container.setVisible(connected)
         self._apply_nav_enabled(connected)
 
+    def is_mismatch(self, v_measured: float, v_setpoint: float, threshold_pct: float = 2.0) -> bool:
+        """
+        Возвращает True, если расхождение между измеренным и заданным напряжением
+        превышает threshold_pct процентов.
+        """
+        if v_setpoint == 0:
+            # Если уставка = 0, то любое ненулевое измерение — расхождение
+            return abs(v_measured) > 1e-6
+        deviation = abs(v_measured - v_setpoint) / abs(v_setpoint)
+        return deviation > (threshold_pct / 100.0)
+
     # ---------- показания ----------
     def _on_meas(self, meas):
         try:
@@ -544,11 +556,35 @@ class MainWindow(QMainWindow):
             i_i = float(meas.current_i)/10
             v_i = float(meas.voltage_i)/10
 
+            polarity =meas.polarity
+            polarity_t = ''
+            if polarity == 1:
+                polarity_t = '-'
+
             if self._display_swap_iv:
                 v, i = i, v
 
-            self.lbl_voltage.setText(f"{v:+.1f} В".replace("+", "").replace(".", ","))
-            self.lbl_current.setText(f"{i:.1f} А".replace(".", ","))
+
+            more_2_v = self.is_mismatch(v, v_i)
+            more_2_i = self.is_mismatch(i, i_i)
+
+            if more_2_v:
+                color_v = "#FFFFFF"
+            else:
+                color_v = "#EF7F1A"
+
+            if more_2_i:
+                color_i = "#FFFFFF"
+            else:
+                color_i = "#EF7F1A"
+
+            self.lbl_voltage.setText(
+                f'<font color="{color_v}">{polarity_t}{v:+.1f} В</font>'.replace("+", "").replace(".", ","))
+
+
+            self.lbl_current.setText(
+                 f'<font color="{color_i}">{polarity_t}{i:+.1f} А</font>'.replace("+", "").replace(".", ",")
+            )
 
             self.lbl_voltage_dup.setText(f"{v_i:+.1f} В".replace("+", "").replace(".", ","))
             self.lbl_current_dup.setText(f"{i_i:.1f} А".replace(".", ","))

@@ -245,6 +245,25 @@ class SourceDriver:
 
         return i, v
 
+    def read_revers(self):
+        from .registry import HoldingRegs  # Импортируем внутри метода или в начале файла
+
+        rr1 = self._read_holding_registers(holding_reg(HoldingRegs.REVERS), count=1)
+
+        i = None
+
+        if rr1 and not rr1.isError() and hasattr(rr1, 'registers') and len(rr1.registers) > 0:
+            i = rr1.registers[0]
+
+        return i
+
+    def write_revers(self, value: int) -> bool:
+        rr = self._write_register(holding_reg(HoldingRegs.REVERS), int(value))
+        success = hasattr(rr, "isError") and not rr.isError()
+        if not success:
+            print(f"Ошибка записи {value} в регистр {HoldingRegs.REVERS}")
+
+        return success
         # --- Чтение/запись конкретных регистров ---
 
     def read_voltage_register(self) -> Optional[int]:
