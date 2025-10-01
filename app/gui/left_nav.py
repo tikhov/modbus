@@ -60,7 +60,7 @@ class LeftNav(QWidget):
             "home":     "home.svg",
             "program":  "chip.svg",
             "source":   "source_arrows.svg",
-            "settings": "set.svg",
+            "settings": "list.svg",
             "info":     "info.svg",
             "lock":     "lock.svg",
         }
@@ -169,7 +169,7 @@ class LeftNav(QWidget):
         self.navigate.emit(key)
 
     def set_active(self, key: str):
-        if key not in self._defs or self._locked or key == "lock":
+        if key not in self._defs or self._locked or key == "lock" or key == "program":
             return
         self._active = key
         self._apply_active_styles()

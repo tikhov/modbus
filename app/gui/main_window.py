@@ -15,12 +15,12 @@ from dictionary import HOME_SCREEN
 from .left_nav import LeftNav
 from .program_screen import ProgramScreen
 from .connection_tab import ConnectionTab
-from .settings_screen import SettingsScreen
+from .settings_screen import SourceTableWidget
 from .info_screen import InfoScreen
 
 from app.state.store import AppStore
 from app.controllers.source_controller import SourceController
-
+from .source_header import SourceHeaderWidget
 
 APP_BG = "#292116"
 PRIMARY_BORDER = "#EF7F1A"
@@ -75,7 +75,7 @@ class MainWindow(QMainWindow):
             on_connect=self.on_connect,
             on_disconnect=self.on_disconnect
         )
-        self.settings_screen = SettingsScreen()           # 3 — Настройки
+        self.settings_screen = SourceTableWidget(source_controller=self.source)           # 3 — Настройки
         self.info_widget = InfoScreen()                   # 4 — Инфо
 
         for w in (self.home_widget, self.program_widget, self.connection_tab,
@@ -155,6 +155,8 @@ class MainWindow(QMainWindow):
         # Сигналы стора
         self.store.connectionChanged.connect(self._on_connection_changed)
         self.store.measurementsChanged.connect(self._on_meas)
+        self.source_table = SourceTableWidget(self.source)
+        self.stack.addWidget(self.source_table)
 
         # Все вкладки активны
         self._apply_nav_enabled(True)
@@ -250,6 +252,9 @@ class MainWindow(QMainWindow):
         v.addLayout(current_layout)
         v.addStretch()
 
+        self.source_header_home = SourceHeaderWidget(source_controller=self.source)
+        v.addWidget(self.source_header_home)
+
         # --- Кнопка подключения ---
         cbx = QVBoxLayout()
         self.btn_connect_big = QPushButton(HOME_SCREEN.get("connect_btn", "Подключиться"))
@@ -326,7 +331,7 @@ class MainWindow(QMainWindow):
         btn_minus = QPushButton()
         btn_minus.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", "minus.svg")))
         btn_minus.setFixedSize(180, 180)
-        btn_minus.setIconSize(QSize(40, 40))
+        btn_minus.setIconSize(QSize(80, 80))
         btn_minus.setStyleSheet(
             "QPushButton {"
             "  background: transparent; color: white; font-size: 32px; font-weight: bold; border: none; border-radius: 40px;"
@@ -342,7 +347,7 @@ class MainWindow(QMainWindow):
 
         btn_plus = QPushButton()
         btn_plus.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", "plus.svg")))
-        btn_plus.setIconSize(QSize(40, 40))
+        btn_plus.setIconSize(QSize(80, 80))
         btn_plus.setFixedSize(180, 180)
         btn_plus.setStyleSheet(
             "QPushButton {"
@@ -442,7 +447,7 @@ class MainWindow(QMainWindow):
             "home": "Домашний экран",
             "program": "Программный режим",
             "source": "Подключение к источнику",
-            "settings": "Настройки",
+            "settings": "Список источников",
             "info": "Информация",
         }
         self.left.set_active(key)
@@ -450,7 +455,7 @@ class MainWindow(QMainWindow):
         self.tab_title_label.setText(titles.get(key, ""))
 
     def _apply_nav_enabled(self, connected: bool):
-        self.left.set_enabled_tabs(home=True, program=True, source=True, settings=True, info=True)
+        self.left.set_enabled_tabs(home=True, program=False, source=True, settings=True, info=True)
 
     # ---------- подключение ----------
     def on_connect(self, conn_type: str, settings: dict):
@@ -533,6 +538,7 @@ class MainWindow(QMainWindow):
     # ---------- показания ----------
     def _on_meas(self, meas):
         try:
+            self.settings_screen.update_from_meas(meas)
             v = float(meas.voltage)
             i = float(meas.current)
             i_i = float(meas.current_i)/10
