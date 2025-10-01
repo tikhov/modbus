@@ -101,8 +101,8 @@ class SourceTableWidget(QWidget):
             v_i_Text = f"{i_i:.1f}".replace(".", ",")
 
             if polarity == 1:
-                i_i_Text = f"-{i_i_Text}"
-                v_i_Text = f"-{v_i_Text}"
+                i_Text = f"-{i_Text}"
+                v_Text = f"-{v_Text}"
 
 
             return [["ИПГ 12/4000-380", "1", i_i_Text, v_i_Text, i_Text, v_Text, ah_counter]]
