@@ -24,7 +24,7 @@ from .source_header import SourceHeaderWidget
 
 APP_BG = "#292116"
 PRIMARY_BORDER = "#EF7F1A"
-TITLE_BAR_BG = "#1E1E1E"   # фон полосы заголовка (внизу)
+TITLE_BAR_BG = "#1E1E1E"
 WHITE = "#FFFFFF"
 ACCENT = "#EF7F1A"
 
@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
         # Состояния экрана
         self._is_fullscreen = True
         self._display_swap_iv = False
-        self.power_state = "ready"     # "ready" | "on" | "stop"
+        self.power_state = "ready"
 
         # Таймер «времени работы»
         self._run_timer = QTimer(self)
@@ -62,21 +62,21 @@ class MainWindow(QMainWindow):
         # Левая панель навигации
         self.left = LeftNav()
         self.left.navigate.connect(self._on_nav)
-        self.left.navigate.connect(self._on_left_nav_event)   # слушаем lock/unlock
+        self.left.navigate.connect(self._on_left_nav_event)
 
         # Правая часть — стек всех вкладок
         self.stack = QStackedWidget()
         self.stack.setObjectName("RightStack")
 
         # Вкладки
-        self.home_widget = self._create_home_widget()     # 0 — Домик
-        self.program_widget = ProgramScreen()             # 1 — Программный режим
-        self.connection_tab = ConnectionTab(              # 2 — Подключение
+        self.home_widget = self._create_home_widget()
+        self.program_widget = ProgramScreen()
+        self.connection_tab = ConnectionTab(
             on_connect=self.on_connect,
             on_disconnect=self.on_disconnect
         )
-        self.settings_screen = SourceTableWidget(source_controller=self.source)           # 3 — Настройки
-        self.info_widget = InfoScreen()                   # 4 — Инфо
+        self.settings_screen = SourceTableWidget(source_controller=self.source)
+        self.info_widget = InfoScreen()
 
         for w in (self.home_widget, self.program_widget, self.connection_tab,
                   self.settings_screen, self.info_widget):
@@ -155,8 +155,6 @@ class MainWindow(QMainWindow):
         # Сигналы стора
         self.store.connectionChanged.connect(self._on_connection_changed)
         self.store.measurementsChanged.connect(self._on_meas)
-        self.source_table = SourceTableWidget(self.source)
-        self.stack.addWidget(self.source_table)
 
         # Все вкладки активны
         self._apply_nav_enabled(True)
@@ -223,32 +221,30 @@ class MainWindow(QMainWindow):
         v.addWidget(self.lbl_home_hint)
 
         # --- Напряжение с кнопками + и - ---
-        self.lbl_voltage = QLabel("0,0 В")  # измерение
+        self.lbl_voltage = QLabel("0,0 В")
         self.lbl_voltage.setAlignment(Qt.AlignCenter)
-        self.lbl_voltage_dup = QLabel("0,0 В")  # уставка
+        self.lbl_voltage_dup = QLabel("0,0 В")
 
         voltage_layout = self._create_adjustable_value_layout(
             label=self.lbl_voltage,
             label_style=f"color:{WHITE}; font-size:180px; font-weight:800;",
             duplicate_label=self.lbl_voltage_dup,
-            duplicate_style="font-size: 80px; color: #aaa;",
-            on_plus=lambda: self._adjust_voltage(10),
-            on_minus=lambda: self._adjust_voltage(-10)
+            duplicate_style="font-size: 70px; color: #aaa;",
+            on_adjust=self._adjust_voltage
         )
         v.addStretch()
         v.addLayout(voltage_layout)
 
         # --- Ток с кнопками + и - ---
-        self.lbl_current = QLabel("0,0 А")  # измерение
+        self.lbl_current = QLabel("0,0 А")
         self.lbl_current.setAlignment(Qt.AlignCenter)
-        self.lbl_current_dup = QLabel("0,0 А")  # уставка
+        self.lbl_current_dup = QLabel("0,0 А")
         current_layout = self._create_adjustable_value_layout(
             label=self.lbl_current,
             label_style=f"color:{ACCENT}; font-size:160px; font-weight:800;",
             duplicate_label=self.lbl_current_dup,
-            duplicate_style="font-size: 80px; color: #aaa;",
-            on_plus=lambda: self._adjust_current(10),
-            on_minus=lambda: self._adjust_current(-10)
+            duplicate_style="font-size: 70px; color: #aaa;",
+            on_adjust=self._adjust_current
         )
         v.addLayout(current_layout)
         v.addStretch()
@@ -313,131 +309,114 @@ class MainWindow(QMainWindow):
 
         return w
 
-    def _create_adjustable_value_layout(self, label: QLabel, label_style: str, duplicate_label: QLabel, duplicate_style: str, on_plus, on_minus):
-        """
-        Создаёт QVBoxLayout (вместо QHBoxLayout), где:
-        - В строке: кнопка "-", основной label, кнопка "+"
-        - Ниже: duplicate_label (меньше, смещен на 43px от правого края)
-        """
-        # Общий контейнер
+    def _create_adjustable_value_layout(self, label: QLabel, label_style: str, duplicate_label: QLabel, duplicate_style: str, on_adjust):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(10)
 
-        # --- Первая строка: кнопки и основной label ---
         row_layout = QHBoxLayout()
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(10)
 
-        btn_minus = QPushButton()
-        btn_minus.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", "minus.svg")))
-        btn_minus.setFixedSize(180, 180)
-        btn_minus.setIconSize(QSize(80, 80))
-        btn_minus.setStyleSheet(
-            "QPushButton {"
-            "  background: transparent; color: white; font-size: 32px; font-weight: bold; border: none; border-radius: 40px;"
-            "}"
-            "QPushButton:hover {"
-            "  background: transparent;"
-            "}"
-        )
-        btn_minus.clicked.connect(on_minus)
+        def create_button(is_plus: bool):
+            btn = QPushButton()
+            icon_name = "plus.svg" if is_plus else "minus.svg"
+            btn.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", icon_name)))
+            btn.setFixedSize(180, 180)
+            btn.setIconSize(QSize(80, 80))
+            btn.setStyleSheet(
+                "QPushButton { background: transparent; color: white; font-size: 32px; font-weight: bold; border: none; border-radius: 40px; }"
+                "QPushButton:hover { background: transparent; }"
+            )
+
+            repeat_timer = QTimer()
+            repeat_timer.setInterval(100)
+            direction = 1 if is_plus else -1
+            pressed_at = None
+
+            def on_timeout():
+                nonlocal pressed_at
+                if pressed_at is None:
+                    return
+                elapsed = time.time() - pressed_at
+                if elapsed >= 3.0:
+                    step = 100
+                elif elapsed >= 2.0:
+                    step = 50
+                else:
+                    step = 10
+                on_adjust(step * direction)
+
+            def on_pressed():
+                nonlocal pressed_at
+                pressed_at = time.time()
+                # Первое изменение — сразу
+                on_adjust(10 * direction)
+                repeat_timer.timeout.connect(on_timeout)
+                repeat_timer.start(300)  # первая задержка 300 мс
+
+            def on_released():
+                nonlocal pressed_at
+                repeat_timer.stop()
+                try:
+                    repeat_timer.timeout.disconnect(on_timeout)
+                except Exception:
+                    pass
+                pressed_at = None
+
+            btn.pressed.connect(on_pressed)
+            btn.released.connect(on_released)
+            return btn
+
+        btn_minus = create_button(is_plus=False)
+        btn_plus = create_button(is_plus=True)
 
         label.setStyleSheet(label_style)
         label.setAlignment(Qt.AlignCenter)
 
-        btn_plus = QPushButton()
-        btn_plus.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", "plus.svg")))
-        btn_plus.setIconSize(QSize(80, 80))
-        btn_plus.setFixedSize(180, 180)
-        btn_plus.setStyleSheet(
-            "QPushButton {"
-            "  background: transparent; color: white; font-size: 32px; font-weight: bold; border: none; border-radius: 40px;"
-            "}"
-            "QPushButton:hover {"
-            "  background: transparent;"
-            "}"
-        )
-        btn_plus.clicked.connect(on_plus)
-
         row_layout.addWidget(btn_minus)
-        row_layout.addWidget(label, 1)  # растягиваем label
+        row_layout.addWidget(label, 1)
         row_layout.addWidget(btn_plus)
 
-        # --- Дублирующий label с отступом 43px от правого края ---
+        # --- Дублирующий лейбл ---
         dup_h_layout = QHBoxLayout()
         dup_h_layout.setContentsMargins(0, 0, 0, 0)
-        dup_h_layout.addStretch()  # растяжение слева (двигает вправо)
+        dup_h_layout.addStretch()
         dup_h_layout.addWidget(duplicate_label)
-        dup_h_layout.addSpacing(430)  # отступ справа (двигает лейбл влево от края)
-
+        dup_h_layout.addSpacing(430)
         duplicate_label.setStyleSheet(duplicate_style)
 
-        # Добавляем строку и дубль в общий layout
         main_layout.addLayout(row_layout)
         main_layout.addLayout(dup_h_layout)
-
         return main_layout
 
-    def _adjust_voltage(self, delta: float):
-        """
-        Изменяет значение в регистре напряжения на delta (например, +1 или -1)
-        """
+    def _adjust_voltage(self, delta: int):
         if not hasattr(self.source, 'driver') or not self.source.driver:
-            print("Нет активного драйвера для изменения напряжения.")
             return
-
         try:
-            # 1. Прочитать текущее значение из регистра
             current_raw_value = self.source.driver.read_voltage_register()
             if current_raw_value is None:
-                print("Не удалось прочитать текущее значение напряжения из регистра.")
                 return
-
-
-            new_raw_value = current_raw_value + int(delta)
-
-            # 3. Записать новое значение в регистр
+            new_raw_value = current_raw_value + delta
             success = self.source.driver.write_voltage_register(new_raw_value)
-
             if success:
                 scaled_new = new_raw_value * 0.1
                 self.lbl_voltage_dup.setText(f"{scaled_new:+.1f} В".replace("+", "").replace(".", ","))
-            else:
-                print("Не удалось записать новое значение напряжения в регистр.")
-
         except Exception as e:
             print(f"Ошибка при изменении напряжения: {e}")
 
-    def _adjust_current(self, delta: float):
-        """
-        Изменяет значение в регистре тока на delta (например, +1 или -1)
-        """
+    def _adjust_current(self, delta: int):
         if not hasattr(self.source, 'driver') or not self.source.driver:
-            print("Нет активного драйвера для изменения тока.")
             return
-
         try:
-            # 1. Прочитать текущее значение из регистра
             current_raw_value = self.source.driver.read_current_register()
             if current_raw_value is None:
-                print("Не удалось прочитать текущее значение тока из регистра.")
                 return
-
-            new_raw_value = current_raw_value + int(delta)
-
-            # 3. Записать новое значение в регистр
+            new_raw_value = current_raw_value + delta
             success = self.source.driver.write_current_register(new_raw_value)
-
             if success:
-                # 4. Обновить дублирующий лейбл (уставку тока)
                 scaled_new = new_raw_value * 0.1
                 self.lbl_current_dup.setText(f"{scaled_new:.1f} А".replace(".", ","))
-
-
-            else:
-                print("Не удалось записать новое значение тока в регистр.")
-
         except Exception as e:
             print(f"Ошибка при изменении тока: {e}")
 
@@ -537,12 +516,7 @@ class MainWindow(QMainWindow):
         self._apply_nav_enabled(connected)
 
     def is_mismatch(self, v_measured: float, v_setpoint: float, threshold_pct: float = 2.0) -> bool:
-        """
-        Возвращает True, если расхождение между измеренным и заданным напряжением
-        превышает threshold_pct процентов.
-        """
         if v_setpoint == 0:
-            # Если уставка = 0, то любое ненулевое измерение — расхождение
             return abs(v_measured) > 1e-6
         deviation = abs(v_measured - v_setpoint) / abs(v_setpoint)
         return deviation > (threshold_pct / 100.0)
@@ -550,40 +524,31 @@ class MainWindow(QMainWindow):
     # ---------- показания ----------
     def _on_meas(self, meas):
         try:
-            self.settings_screen.update_from_meas(meas)
+            if hasattr(self, 'settings_screen') and hasattr(self.settings_screen, 'update_from_meas'):
+                self.settings_screen.update_from_meas(meas)
             v = float(meas.voltage)
             i = float(meas.current)
-            i_i = float(meas.current_i)/10
-            v_i = float(meas.voltage_i)/10
+            i_i = float(meas.current_i) / 10
+            v_i = float(meas.voltage_i) / 10
 
-            polarity =meas.polarity
-            polarity_t = ''
-            if polarity == 1:
-                polarity_t = '-'
+            polarity = meas.polarity
+            polarity_t = '-' if polarity == 1 else ''
 
             if self._display_swap_iv:
                 v, i = i, v
 
-
             more_2_v = self.is_mismatch(v, v_i)
             more_2_i = self.is_mismatch(i, i_i)
 
-            if more_2_v:
-                color_v = "#FFFFFF"
-            else:
-                color_v = "#EF7F1A"
-
-            if more_2_i:
-                color_i = "#FFFFFF"
-            else:
-                color_i = "#EF7F1A"
+            # 🔴 ВАЖНО: белый = расхождение, оранжевый = норма
+            color_v = "#FFFFFF" if more_2_v else "#EF7F1A"
+            color_i = "#FFFFFF" if more_2_i else "#EF7F1A"
 
             self.lbl_voltage.setText(
-                f'<font color="{color_v}">{polarity_t}{v:+.1f} В</font>'.replace("+", "").replace(".", ","))
-
-
+                f'<font color="{color_v}">{polarity_t}{v:+.1f} В</font>'.replace("+", "").replace(".", ",")
+            )
             self.lbl_current.setText(
-                 f'<font color="{color_i}">{polarity_t}{i:+.1f} А</font>'.replace("+", "").replace(".", ",")
+                f'<font color="{color_i}">{polarity_t}{i:+.1f} А</font>'.replace("+", "").replace(".", ",")
             )
 
             self.lbl_voltage_dup.setText(f"{v_i:+.1f} В".replace("+", "").replace(".", ","))
