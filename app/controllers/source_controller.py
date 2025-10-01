@@ -9,6 +9,7 @@ from pymodbus.client import ModbusSerialClient, ModbusTcpClient
 from app.state.store import AppStore
 from app.modbus.connection_service import ConnectionService
 from app.modbus.driver import SourceDriver
+import inspect
 
 
 def _map_parity(p: str) -> str:
@@ -185,6 +186,31 @@ class SourceController(QObject):
                 return ok1 and ok2
         except Exception:
             return False
+
+    def read_register(self, addr: int) -> bool:
+        """
+        Читает holding-регистры начиная с addr (0-based).
+        Для pymodbus >= 3.6.
+        """
+        if not self.driver or not hasattr(self.driver, "client"):
+            raise RuntimeError("Нет активного подключения к устройству")
+
+        rr = self.driver.client.read_coils(addr)
+
+
+
+        if rr.isError():
+            raise RuntimeError(f"Ошибка чтения регистра {addr + 1}")
+        return rr.bits[0]
+
+    def write_register(self, addr: int, value: int) -> bool:
+        if not self.driver or not hasattr(self.driver, "client"):
+            raise RuntimeError("Нет активного подключения к устройству")
+
+        rq = self.driver.client.write_coil(addr, value)
+        if rq.isError():
+            raise RuntimeError(f"Ошибка записи регистра {addr + 1}")
+        return True
 
     # ------------------- Внутреннее -------------------
     def _on_service_error(self, msg: str):

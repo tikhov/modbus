@@ -548,13 +548,18 @@ class MainWindow(QMainWindow):
             self.lbl_current_dup.setText(f"{i_i:.1f} А".replace(".", ","))
 
             self.lbl_ah.setText(f"{int(meas.ah_counter)} А·ч")
+
+            current_val = self.source.read_register(1)
+
             if getattr(meas, "error_overheat", False) or getattr(meas, "error_mains", False):
                 self.power_state = "stop"
             else:
-                if abs(i) > 0 or abs(v) > 0:
+                if current_val:
                     self.power_state = "on"
                 else:
                     self.power_state = "ready"
+                    self.lbl_voltage.setText("0,0 В")
+                    self.lbl_current.setText("0,0 А")
             self._update_power_icon()
             self.btn_power.setEnabled(True)
         except Exception:
@@ -574,32 +579,24 @@ class MainWindow(QMainWindow):
     # ---------- питание ----------
     def _update_power_icon(self):
         name = {
-            "ready": "state_ready_yellow_triangle.svg",
-            "on":    "state_on_green_power.svg",
-            "stop":  "state_stop_red.svg",
-        }.get(self.power_state, "state_ready_yellow_triangle.svg")
+            "ready": "power.svg",
+            "on":    "power_on.svg",
+            "stop":  "power.svg",
+        }.get(self.power_state, "power.svg")
         self.btn_power.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", name)))
 
     def _toggle_power(self):
-        want_on = True if self.power_state in ("ready", "stop") else False
-        old_state = self.power_state
-        self.power_state = "on" if want_on else "ready"
-        self._update_power_icon()
-        ok = False
-        try:
-            ok = bool(self.source.set_power(want_on))
-        except Exception:
-            ok = False
-        if not ok and hasattr(self.source, "driver") and self.source.driver:
-            try:
-                ok1 = bool(self.source.driver.set_device_power(want_on))
-                ok2 = bool(self.source.driver.set_inverter_enable(want_on))
-                ok = ok1 and ok2
-            except Exception:
-                ok = False
-        if not ok:
-            self.power_state = old_state
+        current_val = self.source.read_register(1)
+
+
+        if current_val:
+            new_power_val = False
+        else:
+            new_power_val = True
+            self.power_state = current_val
             self._update_power_icon()
+
+        self.source.write_register(1, new_power_val)
 
     # ---------- статус-бар ----------
     def _render_status(self, text: str, color: str):
