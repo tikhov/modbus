@@ -1,6 +1,8 @@
 import sys
+import time
+
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QTimer, Qt, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QPalette, QColor
 from app.gui.main_window import MainWindow
 from app.gui.splash import SplashScreen
@@ -39,15 +41,51 @@ def main():
     splash.start_fade_in()
 
     def start_main():
-        def show_main():
-            window = MainWindow()
-            window.setWindowState(Qt.WindowNoState)
-            window.showFullScreen()
-            splash.close()
-        splash.start_fade_out(on_finished=show_main)
+        """
+        Создаём главное окно заранее (в невидимом состоянии),
+        затем запускаем fade_out заставки. После завершения fade_out
+        закрываем splash и плавно делаем main видимым.
+        """
+        # Создаём окно, делаем полностью прозрачным и показываем в full screen
+        window = MainWindow()
+        window.setWindowOpacity(0.0)
+        # показываем сразу в полноэкранном режиме — но прозрачный, чтобы не было "скачка"
+        window.showFullScreen()
 
-    # 2000 мс (2 сек) до начала fade out
-    QTimer.singleShot(500, start_main)
+        # Функция, которая будет вызвана после завершения fade out заставки
+        def _on_splash_faded():
+            # Закрываем/скрываем splash чтобы он не перекрывал main
+            try:
+                splash.close()
+            except Exception:
+                try:
+                    splash.hide()
+                except Exception:
+                    pass
+
+            # Плавное проявление главного окна
+            anim = QPropertyAnimation(window, b"windowOpacity")
+
+            anim.setDuration(400)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.InOutQuad)
+            window._fade_in_anim = anim
+
+            def _clear_ref():
+                try:
+                    delattr(window, "_fade_in_anim")
+                except Exception:
+                    pass
+
+            anim.finished.connect(_clear_ref)
+            anim.start()
+
+        # Запускаем fade out заставки и привязываем коллбэк
+        splash.start_fade_out(on_finished=_on_splash_faded)
+
+    time.sleep(1)
+    QTimer.singleShot(1100, start_main)
 
     sys.exit(app.exec())
 
