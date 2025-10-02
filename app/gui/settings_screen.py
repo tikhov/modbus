@@ -105,7 +105,7 @@ class SourceTableWidget(QWidget):
                 v_Text = f"-{v_Text}"
 
 
-            return [["ИПГ 12/4000-380", "1", i_i_Text, v_i_Text, i_Text, v_Text, ah_counter]]
+            return [["ИПГ 12/5000-380", "1", i_i_Text, v_i_Text, i_Text, v_Text, ah_counter]]
         except Exception as e:
             return [["Ошибка", "-", "-", "-", "-", "-", "-"]]
 

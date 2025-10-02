@@ -4,8 +4,9 @@ import os, json, sqlite3
 from typing import Any, Dict, List, Optional
 
 # По умолчанию кладём БД рядом с модулем
-_DEFAULT_DB = os.path.join(os.path.dirname(__file__), "profiles.sqlite3")
-_DB_PATH = _DEFAULT_DB
+
+from resources import DB_PATH
+_DB_PATH = DB_PATH
 
 
 def init_db(db_path: Optional[str] = None) -> None:

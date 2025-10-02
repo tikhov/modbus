@@ -1,16 +1,39 @@
 import os
+import sys
+from pathlib import Path
 
-# Базовая папка проекта (текущая директория файла resources.py)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+def _is_frozen():
+    """Возвращает True, если приложение запущено из .exe (PyInstaller)."""
+    return getattr(sys, 'frozen', False)
 
-# Путь к базе данных (по умолчанию создаётся в корне проекта)
-DB_PATH = os.environ.get("PC_DB_PATH", os.path.join(BASE_DIR, "profiles.db"))
+def _get_base_dir():
+    """Возвращает корень проекта — для исходников или для .exe."""
+    if _is_frozen():
+        return sys._MEIPASS
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
 
-# Папка с ресурсами (иконки, изображения интерфейса)
+def _get_persistent_dir():
+    """Возвращает постоянную папку в пользовательском профиле (для БД и настроек)."""
+    if _is_frozen():
+        appdata = os.getenv('APPDATA')
+        if appdata:
+            return Path(appdata) / "PowerController"
+        else:
+            return Path.home() / "AppData" / "Roaming" / "PowerController"
+    else:
+        # В режиме разработки — БД в корне проекта
+        return Path(_get_base_dir())
+
+# === Пути ===
+BASE_DIR = _get_base_dir()
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 ICONS_DIR = os.path.join(ASSETS_DIR, "icons")
 
-# Словари с настройками по умолчанию
+# БД хранится в постоянной папке (в .exe) или в корне (в разработке)
+DB_PATH = os.environ.get("PC_DB_PATH", str(_get_persistent_dir() / "profiles.db"))
+
+# === Настройки по умолчанию ===
 DEFAULT_RTU = {
     "port": "COM3",
     "baudrate": "9600",

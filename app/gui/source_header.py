@@ -12,7 +12,7 @@ class SourceHeaderWidget(QWidget):
         super().__init__(parent)
         self.source = source_controller  # ← принимаем контроллер
         self._setup_ui()
-        self.set_source_name("ИПГ 12/4000-380 IP65 09-25-3007")
+        self.set_source_name("ИПГ 12/5000-380 IP65 09-25-3007")
 
     def _setup_ui(self):
         layout = QHBoxLayout(self)
@@ -24,7 +24,6 @@ class SourceHeaderWidget(QWidget):
         self._btn.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", "revers.svg")))
         self._btn.setIconSize(QSize(80, 80))
         self._btn.setFixedSize(80, 80)
-        self._btn.setCursor(Qt.PointingHandCursor)
         self._btn.setStyleSheet("""
             QPushButton {
                 background: transparent;

@@ -158,9 +158,9 @@ class LeftNav(QWidget):
     def _on_hold_timeout(self):
         if self._locked:
             self._locked = False
-            self._apply_active_styles()
+            # self._apply_active_styles()
             self._update_icon_metrics()
-            self.navigate.emit("unlock")
+            # self.navigate.emit("unlock")
 
     def _on_click(self, key: str):
         if self._locked:
@@ -236,15 +236,15 @@ class LeftNav(QWidget):
     def lock_ui(self):
         if not self._locked:
             self._locked = True
-            self._lock_btn.setIcon(QIcon(self._lock_icon_locked))  # меняем иконку
-            self._apply_active_styles()
-            self._update_icon_metrics()
-            self.navigate.emit("lock")
+            # self._lock_btn.setIcon(QIcon(self._lock_icon_locked))  # меняем иконку
+            # self._apply_active_styles()
+            # self._update_icon_metrics()
+            # self.navigate.emit("lock")
 
     def unlock_ui(self):
         if self._locked:
             self._locked = False
-            self._lock_btn.setIcon(QIcon(self._lock_icon_unlocked))
-            self._apply_active_styles()
-            self._update_icon_metrics()
-            self.navigate.emit("unlock")
+            # self._lock_btn.setIcon(QIcon(self._lock_icon_unlocked))
+            # self._apply_active_styles()
+            # self._update_icon_metrics()
+            # self.navigate.emit("unlock")

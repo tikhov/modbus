@@ -41,7 +41,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Power Source Controller")
-        self.setMinimumSize(1000, 650)
+        self.setMinimumSize(1300, 1000)
 
         # Сервисы
         self.store = AppStore(self)
@@ -219,6 +219,20 @@ class MainWindow(QMainWindow):
         self.lbl_home_hint.setAlignment(Qt.AlignCenter)
         self.lbl_home_hint.setStyleSheet("font-size: 18px; color: #fff;")
         v.addWidget(self.lbl_home_hint)
+        # --- Ток с кнопками + и - ---
+        self.lbl_current = QLabel("0 А")
+        self.lbl_current.setAlignment(Qt.AlignCenter)
+        self.lbl_current_dup = QLabel("0 А")
+        current_layout = self._create_adjustable_value_layout(
+            label=self.lbl_current,
+            label_style=f"color:{ACCENT}; font-size:160px; font-weight:800;",
+            duplicate_label=self.lbl_current_dup,
+            duplicate_style="font-size: 70px; color: #aaa;",
+            on_adjust=self._adjust_current,
+            type="current"
+        )
+        v.addLayout(current_layout)
+        v.addStretch()
 
         # --- Напряжение с кнопками + и - ---
         self.lbl_voltage = QLabel("0,0 В")
@@ -230,24 +244,11 @@ class MainWindow(QMainWindow):
             label_style=f"color:{WHITE}; font-size:180px; font-weight:800;",
             duplicate_label=self.lbl_voltage_dup,
             duplicate_style="font-size: 70px; color: #aaa;",
-            on_adjust=self._adjust_voltage
+            on_adjust=self._adjust_voltage,
+            type="voltage"
         )
         v.addStretch()
         v.addLayout(voltage_layout)
-
-        # --- Ток с кнопками + и - ---
-        self.lbl_current = QLabel("0,0 А")
-        self.lbl_current.setAlignment(Qt.AlignCenter)
-        self.lbl_current_dup = QLabel("0,0 А")
-        current_layout = self._create_adjustable_value_layout(
-            label=self.lbl_current,
-            label_style=f"color:{ACCENT}; font-size:160px; font-weight:800;",
-            duplicate_label=self.lbl_current_dup,
-            duplicate_style="font-size: 70px; color: #aaa;",
-            on_adjust=self._adjust_current
-        )
-        v.addLayout(current_layout)
-        v.addStretch()
 
         self.source_header_home = SourceHeaderWidget(source_controller=self.source)
         v.addWidget(self.source_header_home)
@@ -309,7 +310,7 @@ class MainWindow(QMainWindow):
 
         return w
 
-    def _create_adjustable_value_layout(self, label: QLabel, label_style: str, duplicate_label: QLabel, duplicate_style: str, on_adjust):
+    def _create_adjustable_value_layout(self, label: QLabel, label_style: str, duplicate_label: QLabel, duplicate_style: str, on_adjust, type: str):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(10)
@@ -330,7 +331,7 @@ class MainWindow(QMainWindow):
             )
 
             repeat_timer = QTimer()
-            repeat_timer.setInterval(100)
+            repeat_timer.setInterval(50)
             direction = 1 if is_plus else -1
             pressed_at = None
 
@@ -351,7 +352,7 @@ class MainWindow(QMainWindow):
                 nonlocal pressed_at
                 pressed_at = time.time()
                 # Первое изменение — сразу
-                on_adjust(10 * direction)
+                on_adjust(10 if type == "current" else 1 * direction)
                 repeat_timer.timeout.connect(on_timeout)
                 repeat_timer.start(300)  # первая задержка 300 мс
 
@@ -416,7 +417,7 @@ class MainWindow(QMainWindow):
             success = self.source.driver.write_current_register(new_raw_value)
             if success:
                 scaled_new = new_raw_value * 0.1
-                self.lbl_current_dup.setText(f"{scaled_new:.1f} А".replace(".", ","))
+                self.lbl_current_dup.setText(f"{int(scaled_new)} А".replace(".", ","))
         except Exception as e:
             print(f"Ошибка при изменении тока: {e}")
 
@@ -452,9 +453,6 @@ class MainWindow(QMainWindow):
             conn_type, settings = self._pending_conn or ("RTU", {})
             ok = self.source.connect(conn_type, settings)
             if ok:
-                self._start_epoch = time.time()
-                self._elapsed = 0
-                self._run_timer.start()
                 self.power_state = "ready"
                 self._update_power_icon()
                 self.btn_power.setEnabled(True)
@@ -488,14 +486,12 @@ class MainWindow(QMainWindow):
         if not connected:
             self._run_timer.stop()
             self._start_epoch = None
-            self._elapsed = 0
-            self.lbl_timer.setText("00:00:00")
             self.power_state = "ready"
             self._update_power_icon()
             self.lbl_voltage.setText("0,0 В")
-            self.lbl_current.setText("0,0 А")
+            self.lbl_current.setText("0 А")
             self.lbl_voltage_dup.setText("0,0 В")
-            self.lbl_current_dup.setText("0,0 А")
+            self.lbl_current_dup.setText("0 А")
             self.lbl_ah.setText("0 А·ч")
             self.btn_power.setEnabled(False)
             self._apply_connected_ui(False)
@@ -527,32 +523,29 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'settings_screen') and hasattr(self.settings_screen, 'update_from_meas'):
                 self.settings_screen.update_from_meas(meas)
             v = float(meas.voltage)
-            i = float(meas.current)
-            i_i = float(meas.current_i) / 10
+            i = int(meas.current)
+            i_i = int(meas.current_i) / 10
             v_i = float(meas.voltage_i) / 10
 
             polarity = meas.polarity
             polarity_t = '-' if polarity == 1 else ''
 
-            if self._display_swap_iv:
-                v, i = i, v
-
             more_2_v = self.is_mismatch(v, v_i)
             more_2_i = self.is_mismatch(i, i_i)
 
-            # 🔴 ВАЖНО: белый = расхождение, оранжевый = норма
             color_v = "#FFFFFF" if more_2_v else "#EF7F1A"
             color_i = "#FFFFFF" if more_2_i else "#EF7F1A"
 
-            self.lbl_voltage.setText(
-                f'<font color="{color_v}">{polarity_t}{v:+.1f} В</font>'.replace("+", "").replace(".", ",")
-            )
+
             self.lbl_current.setText(
-                f'<font color="{color_i}">{polarity_t}{i:+.1f} А</font>'.replace("+", "").replace(".", ",")
+                f'<font color="{color_i}">{polarity_t}{int(i)} A</font>'.replace("+", "").replace(".", ",")
+            )
+            self.lbl_voltage.setText(
+                f'<font color="{color_v}">{polarity_t}{v:+.1f} B</font>'.replace("+", "").replace(".", ",")
             )
 
             self.lbl_voltage_dup.setText(f"{v_i:+.1f} В".replace("+", "").replace(".", ","))
-            self.lbl_current_dup.setText(f"{i_i:.1f} А".replace(".", ","))
+            self.lbl_current_dup.setText(f"{int(i_i)} А")
 
             self.lbl_ah.setText(f"{int(meas.ah_counter)} А·ч")
 
@@ -566,12 +559,12 @@ class MainWindow(QMainWindow):
                 else:
                     self.power_state = "ready"
                     self.lbl_voltage.setText("0,0 В")
-                    self.lbl_current.setText("0,0 А")
+                    self.lbl_current.setText("0 А")
             self._update_power_icon()
             self.btn_power.setEnabled(True)
         except Exception:
             self.lbl_voltage.setText("0,0 В")
-            self.lbl_current.setText("0,0 А")
+            self.lbl_current.setText("0 А")
 
     # ---------- таймер ----------
     def _tick_runtime(self):
@@ -597,8 +590,15 @@ class MainWindow(QMainWindow):
 
 
         if current_val:
+            self._run_timer.stop()
+            self._start_epoch = time.time()
+            self._elapsed = 0
+            self.lbl_timer.setText("00:00:00")
             new_power_val = False
         else:
+            self._start_epoch = time.time()
+            self._elapsed = 0
+            self._run_timer.start()
             new_power_val = True
             self.power_state = current_val
             self._update_power_icon()

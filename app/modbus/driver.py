@@ -296,10 +296,6 @@ class SourceDriver:
 
     # ---------- Inputs ----------
     def read_measurements(self) -> Optional[Measurements]:
-        """
-        I/U — только поштучно «умным» методом (правильный shift подберётся).
-        Остальное — блочно от 30001, при необходимости — поштучно.
-        """
         # I/U
         i_raw = self._read_single_smart(InputRegs.OUTPUT_CURRENT)
         u_raw = self._read_single_smart(InputRegs.OUTPUT_VOLTAGE)
@@ -308,13 +304,6 @@ class SourceDriver:
 
         if i_raw is None or u_raw is None:
             return None
-
-        # автосвоп I/U при явном перекосе
-        if self._swap_iv is None:
-            if (u_raw == 0 and i_raw not in (0, None)) or (i_raw == 0 and u_raw not in (0, None)):
-                self._swap_iv = True
-        if self._swap_iv:
-            i_raw, u_raw = u_raw, i_raw
 
         curr = self._s16(int(i_raw)) * SCALE_I
         volt = self._s16(int(u_raw)) * SCALE_V
@@ -351,9 +340,9 @@ class SourceDriver:
             t2 = self._read_single_smart(InputRegs.TEMP2)
 
         return Measurements(
-            current=float(curr),
+            current=int(curr),
             voltage=float(volt),
-            current_i=float(i),
+            current_i=int(i),
             voltage_i=float(v),
             polarity=int(pol),
             ah_counter=int(ah32),
