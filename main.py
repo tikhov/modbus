@@ -7,6 +7,10 @@ from PySide6.QtGui import QPalette, QColor
 from app.gui.main_window import MainWindow
 from app.gui.splash import SplashScreen
 from app.db import init_db
+import logging
+
+# Уменьшаем логирование pymodbus (часто печатает повторяющиеся сообщения при отсутствии ответа)
+logging.getLogger('pymodbus').setLevel(logging.WARNING)
 
 
 def main():

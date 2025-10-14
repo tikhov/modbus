@@ -36,31 +36,56 @@ class SourceDriver:
         try:
             return self.client.read_input_registers(address, count=count, unit=self.unit)
         except TypeError:
-            return self.client.read_input_registers(address, count=count)
+            try:
+                return self.client.read_input_registers(address, count=count)
+            except Exception:
+                return None
+        except Exception:
+            return None
 
     def _read_holding_registers(self, address: int, count: int = 1):
         try:
             return self.client.read_holding_registers(address, count=count, unit=self.unit)
         except TypeError:
-            return self.client.read_holding_registers(address, count=count)
+            try:
+                return self.client.read_holding_registers(address, count=count)
+            except Exception:
+                return None
+        except Exception:
+            return None
 
     def _read_coils(self, address: int, count: int = 1):
         try:
             return self.client.read_coils(address, count=count, unit=self.unit)
         except TypeError:
-            return self.client.read_coils(address, count=count)
+            try:
+                return self.client.read_coils(address, count=count)
+            except Exception:
+                return None
+        except Exception:
+            return None
 
     def _write_coil_raw(self, address: int, value: bool):
         try:
             return self.client.write_coil(address, bool(value), unit=self.unit)
         except TypeError:
-            return self.client.write_coil(address, bool(value))
+            try:
+                return self.client.write_coil(address, bool(value))
+            except Exception:
+                return None
+        except Exception:
+            return None
 
     def _write_register(self, address: int, value: int):
         try:
             return self.client.write_register(address, int(value), unit=self.unit)
         except TypeError:
-            return self.client.write_register(address, int(value))
+            try:
+                return self.client.write_register(address, int(value))
+            except Exception:
+                return None
+        except Exception:
+            return None
 
     # ---------- утилиты чтения ----------
     @staticmethod
@@ -258,94 +283,104 @@ class SourceDriver:
 
     def read_voltage_register(self) -> Optional[int]:
         from .registry import HoldingRegs
-        rr = self._read_holding_registers(holding_reg(HoldingRegs.VOLTAGE_SETPOINT), count=1)
-        if rr and not rr.isError() and hasattr(rr, 'registers') and len(rr.registers) > 0:
-            return int(rr.registers[0])
+        try:
+            rr = self._read_holding_registers(holding_reg(HoldingRegs.VOLTAGE_SETPOINT), count=1)
+            if rr and not getattr(rr, 'isError', lambda: False)() and hasattr(rr, 'registers') and len(rr.registers) > 0:
+                return int(rr.registers[0])
+        except Exception:
+            pass
         return None
 
     def write_voltage_register(self, value: int) -> bool:
         if value > 120:
             value = 120
         rr = self._write_register(holding_reg(HoldingRegs.VOLTAGE_SETPOINT), int(value))
-        success = hasattr(rr, "isError") and not rr.isError()
+        success = (rr is not None) and (not getattr(rr, 'isError', lambda: False)())
         if not success:
             print(f"Ошибка записи {value} в регистр напряжения {HoldingRegs.VOLTAGE_SETPOINT}")
 
         return success
 
     def read_current_register(self) -> Optional[int]:
-        rr = self._read_holding_registers(holding_reg(HoldingRegs.CURRENT_SETPOINT), count=1)
-        if rr and not rr.isError() and hasattr(rr, 'registers') and len(rr.registers) > 0:
-            return int(rr.registers[0])
+        try:
+            rr = self._read_holding_registers(holding_reg(HoldingRegs.CURRENT_SETPOINT), count=1)
+            if rr and not getattr(rr, 'isError', lambda: False)() and hasattr(rr, 'registers') and len(rr.registers) > 0:
+                return int(rr.registers[0])
+        except Exception:
+            pass
         return None
 
     def write_current_register(self, value: int) -> bool:
         if value > 50000:
             value = 50000
         rr = self._write_register(holding_reg(HoldingRegs.CURRENT_SETPOINT), int(value))
-        success = hasattr(rr, "isError") and not rr.isError()
+        success = (rr is not None) and (not getattr(rr, 'isError', lambda: False)())
         if not success:
             print(f"Ошибка записи {value} в регистр тока {HoldingRegs.CURRENT_SETPOINT}")
         return success
 
     # ---------- Inputs ----------
     def read_measurements(self) -> Optional[Measurements]:
-        # I/U
-        i_raw = self._read_single_smart(InputRegs.OUTPUT_CURRENT)
-        u_raw = self._read_single_smart(InputRegs.OUTPUT_VOLTAGE)
+        try:
+            # I/U
+            i_raw = self._read_single_smart(InputRegs.OUTPUT_CURRENT)
+            u_raw = self._read_single_smart(InputRegs.OUTPUT_VOLTAGE)
 
-        i, v = self.read_40001_and_40002()
+            i, v = self.read_40001_and_40002()
 
-        if i_raw is None or u_raw is None:
+            if i_raw is None or u_raw is None:
+                return None
+
+            curr = self._s16(int(i_raw)) * SCALE_I
+            volt = self._s16(int(u_raw)) * SCALE_V
+
+            # Остальные поля — блочно 30001.., при необходимости — поштучно
+            regs1 = self._read_block_smart(InputRegs.ERROR_FLAGS, 6)
+            err = pol = ah_lo = ah_hi = None
+            if regs1 and len(regs1) >= 6:
+                base_off = input_reg(InputRegs.ERROR_FLAGS)
+                idx = lambda a1: input_reg(a1) - base_off
+                try:
+                    err   = regs1[idx(InputRegs.ERROR_FLAGS)]
+                    pol   = regs1[idx(InputRegs.POLARITY)]
+                    ah_lo = regs1[idx(InputRegs.AH_COUNTER_LO)]
+                    ah_hi = regs1[idx(InputRegs.AH_COUNTER_HI)]
+                except Exception:
+                    pass
+
+            if err   is None: err   = self._read_single_smart(InputRegs.ERROR_FLAGS)
+            if pol   is None: pol   = self._read_single_smart(InputRegs.POLARITY)
+            if ah_lo is None: ah_lo = self._read_single_smart(InputRegs.AH_COUNTER_LO)
+            if ah_hi is None: ah_hi = self._read_single_smart(InputRegs.AH_COUNTER_HI)
+            if None in (err, pol, ah_lo, ah_hi):
+                return None
+
+            ah32 = u32_from_words(int(ah_hi), int(ah_lo))
+
+            # Температуры
+            t_regs = self._read_block_smart(InputRegs.TEMP1, 2)
+            if t_regs and len(t_regs) >= 2:
+                t1, t2 = t_regs[0], t_regs[1]
+            else:
+                t1 = self._read_single_smart(InputRegs.TEMP1)
+                t2 = self._read_single_smart(InputRegs.TEMP2)
+
+            return Measurements(
+                current=int(curr),
+                voltage=float(volt),
+                current_i=int(i),
+                voltage_i=float(v),
+                polarity=int(pol),
+                ah_counter=int(ah32),
+                temp1=(float(t1) if t1 is not None else None),
+                temp2=(float(t2) if t2 is not None else None),
+                errors_raw=int(err),
+                error_overheat=bool((int(err) >> ErrorBits.OVERHEAT) & 1),
+                error_mains=bool((int(err) >> ErrorBits.MAINS_MONITOR) & 1),
+            )
+        except Exception:
+            # Защитный catch — при любых исключениях возвращаем None
             return None
-
-        curr = self._s16(int(i_raw)) * SCALE_I
-        volt = self._s16(int(u_raw)) * SCALE_V
-
-        # Остальные поля — блочно 30001.., при необходимости — поштучно
-        regs1 = self._read_block_smart(InputRegs.ERROR_FLAGS, 6)
-        err = pol = ah_lo = ah_hi = None
-        if regs1 and len(regs1) >= 6:
-            base_off = input_reg(InputRegs.ERROR_FLAGS)
-            idx = lambda a1: input_reg(a1) - base_off
-            try:
-                err   = regs1[idx(InputRegs.ERROR_FLAGS)]
-                pol   = regs1[idx(InputRegs.POLARITY)]
-                ah_lo = regs1[idx(InputRegs.AH_COUNTER_LO)]
-                ah_hi = regs1[idx(InputRegs.AH_COUNTER_HI)]
-            except Exception:
-                pass
-
-        if err   is None: err   = self._read_single_smart(InputRegs.ERROR_FLAGS)
-        if pol   is None: pol   = self._read_single_smart(InputRegs.POLARITY)
-        if ah_lo is None: ah_lo = self._read_single_smart(InputRegs.AH_COUNTER_LO)
-        if ah_hi is None: ah_hi = self._read_single_smart(InputRegs.AH_COUNTER_HI)
-        if None in (err, pol, ah_lo, ah_hi):
-            return None
-
-        ah32 = u32_from_words(int(ah_hi), int(ah_lo))
-
-        # Температуры
-        t_regs = self._read_block_smart(InputRegs.TEMP1, 2)
-        if t_regs and len(t_regs) >= 2:
-            t1, t2 = t_regs[0], t_regs[1]
-        else:
-            t1 = self._read_single_smart(InputRegs.TEMP1)
-            t2 = self._read_single_smart(InputRegs.TEMP2)
-
-        return Measurements(
-            current=int(curr),
-            voltage=float(volt),
-            current_i=int(i),
-            voltage_i=float(v),
-            polarity=int(pol),
-            ah_counter=int(ah32),
-            temp1=(float(t1) if t1 is not None else None),
-            temp2=(float(t2) if t2 is not None else None),
-            errors_raw=int(err),
-            error_overheat=bool((int(err) >> ErrorBits.OVERHEAT) & 1),
-            error_mains=bool((int(err) >> ErrorBits.MAINS_MONITOR) & 1),
-        )
 
     # ---------- Пинг ----------
     def ping(self) -> bool:

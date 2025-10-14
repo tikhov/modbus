@@ -205,6 +205,32 @@ class SettingsPanel(QWidget):
         self.connect_btn.setMinimumHeight(34)
         self.connect_btn.clicked.connect(self._connect)
 
+        # Заглушка рядом с кнопкой подключения — пока отображает подсказку
+        self.stub_btn = QPushButton("Выйти из полноэкранного режима")
+        self.stub_btn.setStyleSheet(BTN_STYLE)
+        self.stub_btn.setMinimumHeight(34)
+        # Переключение полноэкранного режима приложения при клике на заглушку
+        def _toggle_fullscreen():
+            try:
+                w = self.window()
+                if w is None:
+                    return
+                # если в полноэкранном режиме — вернуть нормальное окно, иначе full
+                if w.isFullScreen():
+                    w.showNormal()
+                    self.stub_btn.setText("Полноэкранный режим")
+                else:
+                    w.showFullScreen()
+                    self.stub_btn.setText("Выйти из полноэкранного режима")
+            except Exception:
+                try:
+                    # fallback — показать сообщение
+                    self.alert.show_message("Не удалось переключить режим отображения.")
+                except Exception:
+                    pass
+
+        self.stub_btn.clicked.connect(_toggle_fullscreen)
+
         # back_btn = QPushButton(SETTINGS_SCREEN["back_btn"])
         # back_btn.setStyleSheet(BTN_STYLE)
         # back_btn.setMinimumHeight(34)
@@ -212,6 +238,7 @@ class SettingsPanel(QWidget):
 
         btns.addWidget(self.save_btn)
         btns.addWidget(self.connect_btn)
+        btns.addWidget(self.stub_btn)
         btns.addStretch()
         # btns.addWidget(back_btn)
         v.addLayout(btns)

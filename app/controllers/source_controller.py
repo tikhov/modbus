@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Optional, Dict, Any
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QThread, QMetaObject, Qt
 
 from pymodbus.client import ModbusSerialClient, ModbusTcpClient
 
@@ -134,9 +134,25 @@ class SourceController(QObject):
                     )
 
             # Только опрос — без записи в coils
-            self.svc = ConnectionService(self.driver, parent=self)
+            # ConnectionService теперь управляет собственным внутренним потоком,
+            # поэтому просто создаём и стартуем сервис.
+            self.svc = ConnectionService(self.driver, parent=None)
             self.svc.measurements.connect(self.store.set_measurements)
+            # Подключаем ошибку и к локальному обработчику, и прямо в store —
+            # это гарантирует, что GUI получит уведомление, даже если сигнал
+            # проходит из рабочего потока.
             self.svc.error.connect(self._on_service_error)
+            try:
+                # напрямую подключаем сигнал ошибки сервиса к store.set_error
+                # это использует queued connection между потоками и гарантирует
+                # доставку сообщения в GUI-поток
+                self.svc.error.connect(self.store.set_error)
+            except Exception:
+                # fallback к lambda, если прямое подключение не сработает
+                try:
+                    self.svc.error.connect(lambda m: self.store.set_error(m))
+                except Exception:
+                    pass
             self.svc.start()
 
             self.store.set_connected(True)
@@ -145,7 +161,15 @@ class SourceController(QObject):
 
         except Exception as e:
             self._cleanup()
-            self.store.last_error = str(e)
+            # Сохраняем и эмитим ошибку через store
+            try:
+                self.store.last_error = str(e)
+            except Exception:
+                pass
+            try:
+                self.store.set_error(str(e))
+            except Exception:
+                pass
             return False
 
     def set_voltage(self, value: float):
@@ -212,12 +236,39 @@ class SourceController(QObject):
 
     # ------------------- Внутреннее -------------------
     def _on_service_error(self, msg: str):
-        # Просто сохраняем последний текст ошибки (для показа в UI)
-        self.store.last_error = msg
+        # При ошибке сервиса — останавливаем опрос и закрываем соединение,
+        # чтобы прекратить повторные попытки чтения (и шум в консоли).
+        # debug: логируем приход ошибки в контроллер
+        try:
+            print(f"[SourceController] service error: {msg}")
+        except Exception:
+            pass
+        try:
+            self.store.last_error = msg
+        except Exception:
+            pass
+        try:
+            self.store.set_error(msg)
+        except Exception:
+            pass
+        # Остановить сервис/клиент немедленно
+        try:
+            # остановим сервис и закроем клиент
+            self._cleanup()
+        except Exception:
+            pass
+        try:
+            self.store.set_connected(False)
+        except Exception:
+            pass
+        try:
+            self.connectionChanged.emit(False)
+        except Exception:
+            pass
 
     def _cleanup(self):
         # Останов сервиса
-        if self.svc:
+        if getattr(self, 'svc', None):
             try:
                 self.svc.stop()
             except Exception:

@@ -17,6 +17,7 @@ from .program_screen import ProgramScreen
 from .connection_tab import ConnectionTab
 from .settings_screen import SourceTableWidget
 from .info_screen import InfoScreen
+from .widgets import AlertBox, DangerOverlay
 
 from app.state.store import AppStore
 from app.controllers.source_controller import SourceController
@@ -64,7 +65,6 @@ class MainWindow(QMainWindow):
         self.left = LeftNav()
         self.left.navigate.connect(self._on_nav)
         self.left.navigate.connect(self._on_left_nav_event)
-        self.left.navigate.connect(self._on_left_nav_event)
         self.left.lockStateChanged.connect(self._on_lock)
 
         # Правая часть — стек всех вкладок
@@ -107,12 +107,23 @@ class MainWindow(QMainWindow):
         self.tab_title_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         self.tab_title_label.setStyleSheet("color: #FFFFFF; font-size: 30px; font-weight: 800;")
         title_lay.addWidget(self.tab_title_label)
+
+        # Глобальный alert (вверху правой панели) — используется для показа ошибок/предупреждений
+        self._global_alert = AlertBox(self.tab_title_bar)
+        title_lay.addStretch()
+        title_lay.addWidget(self._global_alert, 0, Qt.AlignVCenter | Qt.AlignRight)
+        self._global_alert.hide()
+
         right_v.addWidget(self.tab_title_bar, 0)
 
         # --- Overlay блокировки ---
         self.overlay = QWidget(self.right_panel)
         self.overlay.setStyleSheet("background: transparent;")
         self.overlay.hide()
+
+        # Danger overlay для критических ошибок (большая плашка)
+        self._danger_overlay = DangerOverlay(self.right_panel)
+        self._danger_overlay.hide_overlay()
 
         # -------- Собираем всё вместе --------
         root = QWidget()
@@ -158,6 +169,12 @@ class MainWindow(QMainWindow):
         # Сигналы стора
         self.store.connectionChanged.connect(self._on_connection_changed)
         self.store.measurementsChanged.connect(self._on_meas)
+        # Ошибки — показываем alert без блокировки UI
+        try:
+            self.store.errorText.connect(self._on_store_error)
+        except Exception:
+            # старые версии store могут не иметь сигнала
+            pass
 
         # Все вкладки активны
         self._apply_nav_enabled(True)
@@ -501,6 +518,12 @@ class MainWindow(QMainWindow):
             self._apply_connected_ui(False)
             self.connection_tab.set_connected(False)
             self._set_status("reconnecting", "Переподключение")
+            # Показываем overlay с предупреждением об отключении
+            try:
+                last = getattr(self.store, 'last_error', None) or "Устройство отключено"
+            except Exception:
+                last = "Устройство отключено"
+            self._show_connect_error_overlay(str(last))
         else:
             self.connection_tab.set_connected(True)
             self._set_status("connected", "Подключено")
@@ -655,3 +678,43 @@ class MainWindow(QMainWindow):
 
     def _on_lock(self, locked: bool):
         self.lock = locked
+
+    # ---------- Ошибки / предупреждения ----------
+    def _on_store_error(self, text: str):
+        """Показать плашку ошибки в заголовке и дать возможность перейти к настройкам."""
+        if not text:
+            return
+        try:
+            print(f"[MainWindow] store error received: {text}")
+        except Exception:
+            pass
+        # отменим любые ожидающие соединения
+        try:
+            self._connect_job_active = False
+            self._pending_conn = None
+        except Exception:
+            pass
+        # Показываем сразу крупный overlay (не показываем маленькую плашку)
+        try:
+            self._show_connect_error_overlay(str(text))
+        except Exception:
+            try:
+                self._global_alert.show_error(str(text))
+            except Exception:
+                pass
+
+    def _show_connect_error_overlay(self, text: str):
+        """Показать крупный overlay с текстом ошибки и кнопкой вернуться к настройкам подключения."""
+        if not text:
+            text = "Устройство отключено"
+        try:
+            self._danger_overlay.setGeometry(self.right_panel.rect())
+            # при нажатии "Вернуться" — открыть экран подключения
+            self._danger_overlay.show_error(text, on_back=lambda: self._on_nav("source"))
+            self._danger_overlay.raise_()
+        except Exception:
+            # fallback — просто показать глобальную плашку
+            try:
+                self._global_alert.show_error(text)
+            except Exception:
+                pass

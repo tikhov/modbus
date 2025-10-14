@@ -17,7 +17,8 @@ class SourceTableWidget(QWidget):
     def _setup_ui(self):
         # ВНЕШНИЙ layout
         outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(16, 16, 16, 16)
+        # увеличить отступ сверху на 30px
+        outer_layout.setContentsMargins(16, 50, 16, 16)
         outer_layout.setSpacing(0)
 
         # Табличный layout
@@ -39,7 +40,8 @@ class SourceTableWidget(QWidget):
 
         header_font = QFont()
         header_font.setBold(True)
-        header_font.setPointSize(10)
+        # увеличить размер шрифта заголовков
+        header_font.setPointSize(15)
 
         for col, text in enumerate(headers):
             label = QLabel(text)
@@ -48,11 +50,15 @@ class SourceTableWidget(QWidget):
             label.setStyleSheet(
                 "color: #FFFFFF; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px;"
             )
-            label.setFixedHeight(30)  # фиксируем высоту строки
+            label.setFixedHeight(40)  # увеличить высоту строки для более крупного шрифта
             table_layout.addWidget(label, 0, col)
 
         # Данные (2 строки)
         self._data_labels = {}
+        # шрифт для значений таблицы
+        data_font = QFont()
+        data_font.setPointSize(15)
+
         for row in range(1, 3):
             for col in range(8):
                 if col == 7:
@@ -62,14 +68,15 @@ class SourceTableWidget(QWidget):
                     icon_label.setAlignment(Qt.AlignCenter)
                     icon_label.setCursor(Qt.PointingHandCursor)
                     icon_label.mousePressEvent = lambda e, r=row: self._on_graph_clicked(r)
-                    icon_label.setFixedHeight(30)
+                    icon_label.setFixedHeight(36)
                     table_layout.addWidget(icon_label, row, col)
                     self._data_labels[(row, col)] = icon_label
                 else:
                     label = QLabel("-")
                     label.setAlignment(Qt.AlignCenter)
+                    label.setFont(data_font)
                     label.setStyleSheet("color: #FFFFFF; padding: 4px;")
-                    label.setFixedHeight(30)
+                    label.setFixedHeight(36)
                     table_layout.addWidget(label, row, col)
                     self._data_labels[(row, col)] = label
 

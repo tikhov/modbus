@@ -70,10 +70,23 @@ def create_client(conn_type: ConnType, settings: Dict[str, Any]):
             bytesize=8,
             timeout=timeout,
         )
+        # уменьшить внутренние повторные попытки (если поддерживается библиотекой)
+        try:
+            setattr(client, 'retries', 0)
+        except Exception:
+            pass
+        try:
+            setattr(client, 'retry_on_empty', False)
+        except Exception:
+            pass
         return client
 
     # TCP
     host = settings["host"]
     port = int(settings.get("port", 502))
     client = ModbusTcpClient(host=host, port=port, timeout=timeout)
+    try:
+        setattr(client, 'retries', 0)
+    except Exception:
+        pass
     return client
