@@ -8,12 +8,12 @@ from resources import ASSETS_DIR
 
 
 class SourceHeaderWidget(QWidget):
-    def __init__(self, source_controller=None, parent=None, lock=False):
+    def __init__(self, source_controller=None, parent=None, main=None):
         super().__init__(parent)
         self.source = source_controller  # ← принимаем контроллер
         self._setup_ui()
         self.set_source_name("ИПГ 12/5000-380 IP65 09-25-3007")
-        self.lock = lock
+        self.main = main
 
     def _setup_ui(self):
         layout = QHBoxLayout(self)
@@ -48,7 +48,7 @@ class SourceHeaderWidget(QWidget):
         self._label.setText(name)
 
     def _on_button_clicked(self):
-        if self.source is None or self.lock:
+        if self.source is None or self.main.lock:
             return
         try:
             old = self.source.driver.read_revers()

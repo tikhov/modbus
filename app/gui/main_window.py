@@ -64,6 +64,8 @@ class MainWindow(QMainWindow):
         self.left = LeftNav()
         self.left.navigate.connect(self._on_nav)
         self.left.navigate.connect(self._on_left_nav_event)
+        self.left.navigate.connect(self._on_left_nav_event)
+        self.left.lockStateChanged.connect(self._on_lock)
 
         # Правая часть — стек всех вкладок
         self.stack = QStackedWidget()
@@ -187,7 +189,6 @@ class MainWindow(QMainWindow):
 
     # ---------- overlay ----------
     def _on_left_nav_event(self, key: str):
-        print(key)
         if key == "lock":
             self._show_overlay(True)
         elif key == "unlock":
@@ -253,7 +254,7 @@ class MainWindow(QMainWindow):
         v.addStretch()
         v.addLayout(voltage_layout)
 
-        self.source_header_home = SourceHeaderWidget(source_controller=self.source, lock=self.lock)
+        self.source_header_home = SourceHeaderWidget(source_controller=self.source, main=self)
         v.addWidget(self.source_header_home)
 
         # --- Кнопка подключения ---
@@ -651,3 +652,6 @@ class MainWindow(QMainWindow):
         }.get(self._status_mode, "#bdc3c7")
         text = self._status_text_base + ("." * self._status_dots)
         self._render_status(text, color)
+
+    def _on_lock(self, locked: bool):
+        self.lock = locked

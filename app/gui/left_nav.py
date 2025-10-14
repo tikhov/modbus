@@ -18,6 +18,7 @@ class LeftNav(QWidget):
     Ключи: home, program, source, settings, info, lock
     """
     navigate = Signal(str)
+    lockStateChanged = Signal(bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -237,9 +238,11 @@ class LeftNav(QWidget):
     def lock_ui(self):
         if not self._locked:
             self._locked = True
+            self.lockStateChanged.emit(True)
             self._update_icon_metrics()
 
     def unlock_ui(self):
         if self._locked:
             self._locked = False
+            self.lockStateChanged.emit(False)
             self._update_icon_metrics()
