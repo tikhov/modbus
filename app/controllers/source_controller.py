@@ -78,11 +78,9 @@ class SourceController(QObject):
         """
         self.disconnect()
         self.conn_type = (conn_type or "").upper().strip()
-        swap_iv = _parse_bool(settings.get("swap_iv"))
 
         try:
             if self.conn_type == "RTU":
-                # ---- Serial RTU (pymodbus 3.x: БЕЗ method="rtu") ----
                 raw_port = settings.get("port") or settings.get("device") or ""
                 port = _normalize_port_name(raw_port)
                 if not port:

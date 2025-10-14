@@ -40,6 +40,7 @@ def icon_label(name: str, size: int = 24) -> QLabel:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.lock = False
         self.setWindowTitle("Power Source Controller")
         self.setMinimumSize(1300, 1000)
 
@@ -186,6 +187,7 @@ class MainWindow(QMainWindow):
 
     # ---------- overlay ----------
     def _on_left_nav_event(self, key: str):
+        print(key)
         if key == "lock":
             self._show_overlay(True)
         elif key == "unlock":
@@ -193,10 +195,12 @@ class MainWindow(QMainWindow):
 
     def _show_overlay(self, show: bool):
         if show:
+            self.lock = True
             self.overlay.setGeometry(self.right_panel.rect())
             self.overlay.raise_()
             self.overlay.show()
         else:
+            self.lock = False
             self.overlay.hide()
 
     def resizeEvent(self, event):
@@ -208,7 +212,6 @@ class MainWindow(QMainWindow):
     def _apply_main_style(self):
         self.stack.setStyleSheet(f"QWidget#RightStack {{ background: {APP_BG}; }}")
 
-    # ---------- построение Домика ----------
     def _create_home_widget(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
@@ -250,7 +253,7 @@ class MainWindow(QMainWindow):
         v.addStretch()
         v.addLayout(voltage_layout)
 
-        self.source_header_home = SourceHeaderWidget(source_controller=self.source)
+        self.source_header_home = SourceHeaderWidget(source_controller=self.source, lock=self.lock)
         v.addWidget(self.source_header_home)
 
         # --- Кнопка подключения ---
@@ -272,7 +275,7 @@ class MainWindow(QMainWindow):
         bottom.setContentsMargins(20, 20, 20, 20)
 
         chip = icon_label("chip.svg", 72)
-        lbl_prog = QLabel("Программа 1")
+        lbl_prog = QLabel("ЦДУ ручное")
         lbl_prog.setStyleSheet("color:#fff; font-size:42px;")
         bottom.addWidget(chip)
         bottom.addWidget(lbl_prog)
@@ -392,7 +395,7 @@ class MainWindow(QMainWindow):
         return main_layout
 
     def _adjust_voltage(self, delta: int):
-        if not hasattr(self.source, 'driver') or not self.source.driver:
+        if not hasattr(self.source, 'driver') or not self.source.driver or self.lock:
             return
         try:
             current_raw_value = self.source.driver.read_voltage_register()
@@ -407,7 +410,7 @@ class MainWindow(QMainWindow):
             print(f"Ошибка при изменении напряжения: {e}")
 
     def _adjust_current(self, delta: int):
-        if not hasattr(self.source, 'driver') or not self.source.driver:
+        if not hasattr(self.source, 'driver') or not self.source.driver or self.lock:
             return
         try:
             current_raw_value = self.source.driver.read_current_register()
@@ -586,8 +589,10 @@ class MainWindow(QMainWindow):
         self.btn_power.setIcon(QIcon(os.path.join(ASSETS_DIR, "icons", name)))
 
     def _toggle_power(self):
-        current_val = self.source.read_register(1)
+        if self.lock:
+            return
 
+        current_val = self.source.read_register(1)
 
         if current_val:
             self._run_timer.stop()

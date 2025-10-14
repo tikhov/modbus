@@ -18,16 +18,6 @@ ADDR_MAX = 65535  # верхняя граница (исключая)
 
 
 class SourceDriver:
-    """
-    Pymodbus 2.x/3.x совместимо.
-
-    Под твоё устройство:
-    - Начальный сдвиг адресации input-регистров = +1.
-    - I и U читаем поштучно «умным» методом (без попыток отрицательных адресов).
-    - Остальные поля читаем блочно, при необходимости — поштучно.
-    - Никаких address < 0.
-    - Запись катушек — с подтверждением, при несовпадении пробуем addr-1.
-    """
     def __init__(self, client: ModbusClientT, unit_id: int = 1, swap_iv: Optional[bool] = None):
         self.client = client
         self.unit = unit_id
@@ -274,6 +264,8 @@ class SourceDriver:
         return None
 
     def write_voltage_register(self, value: int) -> bool:
+        if value > 120:
+            value = 120
         rr = self._write_register(holding_reg(HoldingRegs.VOLTAGE_SETPOINT), int(value))
         success = hasattr(rr, "isError") and not rr.isError()
         if not success:
@@ -288,6 +280,8 @@ class SourceDriver:
         return None
 
     def write_current_register(self, value: int) -> bool:
+        if value > 50000:
+            value = 50000
         rr = self._write_register(holding_reg(HoldingRegs.CURRENT_SETPOINT), int(value))
         success = hasattr(rr, "isError") and not rr.isError()
         if not success:

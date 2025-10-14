@@ -68,9 +68,13 @@ class LeftNav(QWidget):
         self._active = "home"
         self._locked = False
         self._items = {}
-        self._hold_timer = QTimer(self)
-        self._hold_timer.setSingleShot(True)
-        self._hold_timer.timeout.connect(self._on_hold_timeout)
+
+        # === ТРЕВОЙ КЛИК для разблокировки ===
+        self._click_timer = QTimer(self)
+        self._click_timer.setSingleShot(True)
+        self._click_timer.setInterval(1500)  # 1.5 сек на все клики
+        self._click_count = 0
+        self._click_timer.timeout.connect(self._reset_clicks)
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 12, 0, 0)
@@ -91,8 +95,7 @@ class LeftNav(QWidget):
         for key in ("home", "program", "source", "settings", "info"):
             self._items[key]["btn"].clicked.connect(lambda _, k=key: self._on_click(k))
 
-        self._lock_btn.pressed.connect(self._on_lock_pressed)
-        self._lock_btn.released.connect(self._on_lock_released)
+        self._lock_btn.clicked.connect(self._on_lock_clicked)
 
         self._apply_active_styles()
         self._update_icon_metrics()
@@ -140,27 +143,26 @@ class LeftNav(QWidget):
         self._items["lock"] = {"btn": self._lock_btn, "wrap": wrap}
 
     # ---------- блокировка ----------
-    def _on_lock_pressed(self):
-        lock_path = self._icon_path("lock.svg")
+    def _on_lock_clicked(self):
+        """
+        Одинарное нажатие — блокировка.
+        Тройное (3 раза за <=1.5 сек) — разблокировка.
+        """
         if not self._locked:
-            # короткое нажатие → блокировка
             self.lock_ui()
-            self._lock_btn.setIcon(QIcon(lock_path))
         else:
-            # если уже заблокировано — ждём удержания
-            self._hold_timer.start(1000)
+            # считаем клики
+            self._click_count += 1
+            if not self._click_timer.isActive():
+                self._click_timer.start()
 
+            if self._click_count >= 3:
+                self.unlock_ui()
+                self._reset_clicks()
 
-    def _on_lock_released(self):
-        if self._hold_timer.isActive():
-            self._hold_timer.stop()
-
-    def _on_hold_timeout(self):
-        if self._locked:
-            self._locked = False
-            # self._apply_active_styles()
-            self._update_icon_metrics()
-            # self.navigate.emit("unlock")
+    def _reset_clicks(self):
+        self._click_count = 0
+        self._click_timer.stop()
 
     def _on_click(self, key: str):
         if self._locked:
@@ -209,7 +211,6 @@ class LeftNav(QWidget):
             spacer = self._items[key]["spacer"]
             spacer.changeSize(0, bottom_gap)
 
-        # lock
         lock_icon_size = int(icon_size * 0.9)
         unlock_path = self._icon_path("unlock.svg")
         lock_path = self._icon_path("lock.svg")
@@ -236,15 +237,9 @@ class LeftNav(QWidget):
     def lock_ui(self):
         if not self._locked:
             self._locked = True
-            # self._lock_btn.setIcon(QIcon(self._lock_icon_locked))  # меняем иконку
-            # self._apply_active_styles()
-            # self._update_icon_metrics()
-            # self.navigate.emit("lock")
+            self._update_icon_metrics()
 
     def unlock_ui(self):
         if self._locked:
             self._locked = False
-            # self._lock_btn.setIcon(QIcon(self._lock_icon_unlocked))
-            # self._apply_active_styles()
-            # self._update_icon_metrics()
-            # self.navigate.emit("unlock")
+            self._update_icon_metrics()

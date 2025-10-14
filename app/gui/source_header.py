@@ -8,11 +8,12 @@ from resources import ASSETS_DIR
 
 
 class SourceHeaderWidget(QWidget):
-    def __init__(self, source_controller=None, parent=None):
+    def __init__(self, source_controller=None, parent=None, lock=False):
         super().__init__(parent)
         self.source = source_controller  # ← принимаем контроллер
         self._setup_ui()
         self.set_source_name("ИПГ 12/5000-380 IP65 09-25-3007")
+        self.lock = lock
 
     def _setup_ui(self):
         layout = QHBoxLayout(self)
@@ -47,9 +48,7 @@ class SourceHeaderWidget(QWidget):
         self._label.setText(name)
 
     def _on_button_clicked(self):
-        """Читает Coil 1 (включение устройства) и выводит в консоль."""
-        if self.source is None:
-            print("⚠️ SourceController не передан в SourceHeaderWidget")
+        if self.source is None or self.lock:
             return
         try:
             old = self.source.driver.read_revers()
@@ -60,5 +59,4 @@ class SourceHeaderWidget(QWidget):
             self.source.driver.write_revers(new)
             pass
         except Exception as e:
-            print(f"❌ Ошибка при чтении регистра: {e}")
             return
