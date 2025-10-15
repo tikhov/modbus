@@ -34,56 +34,31 @@ class SourceDriver:
     # ---------- совместимые обёртки ----------
     def _read_input_registers(self, address: int, count: int = 1):
         try:
-            return self.client.read_input_registers(address, count=count, unit=self.unit)
-        except TypeError:
-            try:
-                return self.client.read_input_registers(address, count=count)
-            except Exception:
-                return None
+            return self.client.read_input_registers(address, count=count)
         except Exception:
             return None
 
     def _read_holding_registers(self, address: int, count: int = 1):
         try:
-            return self.client.read_holding_registers(address, count=count, unit=self.unit)
-        except TypeError:
-            try:
-                return self.client.read_holding_registers(address, count=count)
-            except Exception:
-                return None
+            return self.client.read_holding_registers(address, count=count)
         except Exception:
             return None
 
     def _read_coils(self, address: int, count: int = 1):
         try:
-            return self.client.read_coils(address, count=count, unit=self.unit)
-        except TypeError:
-            try:
-                return self.client.read_coils(address, count=count)
-            except Exception:
-                return None
+            return self.client.read_coils(address, count=count)
         except Exception:
             return None
 
     def _write_coil_raw(self, address: int, value: bool):
         try:
-            return self.client.write_coil(address, bool(value), unit=self.unit)
-        except TypeError:
-            try:
-                return self.client.write_coil(address, bool(value))
-            except Exception:
-                return None
+            return self.client.write_coil(address, bool(value))
         except Exception:
             return None
 
     def _write_register(self, address: int, value: int):
         try:
-            return self.client.write_register(address, int(value), unit=self.unit)
-        except TypeError:
-            try:
-                return self.client.write_register(address, int(value))
-            except Exception:
-                return None
+            return self.client.write_register(address, int(value))
         except Exception:
             return None
 
@@ -157,20 +132,21 @@ class SourceDriver:
         return None
 
     def _read_single_smart(self, addr_1based: int) -> Optional[int]:
-        """
-        Поштучное чтение адреса с авто-подбором адресации и сдвига.
-        Сдвиги только безопасные (без отрицательных адресов).
-        """
-        off_base, abs_base = self._pair_addrs_input(addr_1based)
-        for reader in (self._read_inp_mode, self._read_hold_mode):
-            for base in (off_base, abs_base):
-                for sh in self._shifts_for():
-                    start = base + sh
-                    regs = reader(start, 1)
-                    if regs is not None:
-                        if self._addr_shift != sh:
-                            self._addr_shift = sh
-                        return regs[0]
+        try:
+            off_base, abs_base = self._pair_addrs_input(addr_1based)
+            for reader in (self._read_inp_mode, self._read_hold_mode):
+                for base in (off_base, abs_base):
+                    for sh in self._shifts_for():
+                        start = base + sh
+                        regs = reader(start, 1)
+                        if regs is not None:
+                            if self._addr_shift != sh:
+                                self._addr_shift = sh
+                            return regs[0]
+                        else:
+                            return None
+        except Exception:
+            pass
         return None
 
     # ---------- запись катушек с верификацией ----------
@@ -366,9 +342,9 @@ class SourceDriver:
                 t2 = self._read_single_smart(InputRegs.TEMP2)
 
             return Measurements(
-                current=int(curr),
+                current=float(curr),
                 voltage=float(volt),
-                current_i=int(i),
+                current_i=float(i),
                 voltage_i=float(v),
                 polarity=int(pol),
                 ah_counter=int(ah32),
@@ -379,10 +355,12 @@ class SourceDriver:
                 error_mains=bool((int(err) >> ErrorBits.MAINS_MONITOR) & 1),
             )
         except Exception:
-            # Защитный catch — при любых исключениях возвращаем None
             return None
 
     # ---------- Пинг ----------
     def ping(self) -> bool:
+        try:
         # Самый надёжный быстрый ping — одиночное чтение 30001
-        return self._read_single_smart(InputRegs.ERROR_FLAGS) is not None
+            return self._read_single_smart(InputRegs.ERROR_FLAGS) is not None
+        except:
+            return False

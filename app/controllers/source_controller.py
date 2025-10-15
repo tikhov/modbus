@@ -100,8 +100,11 @@ class SourceController(QObject):
                     stopbits=stopbits, # 1 / 1.5 / 2
                     bytesize=bytesize, # 8 data bits
                     timeout=2.0,
+                    retries=1
                 )
+
                 if not self.client.connect():
+                    self.client.close()
                     raise RuntimeError(
                         f"Не удалось открыть порт {port} "
                         f"(baud={baudrate}, parity={parity}, stop={stopbits}, data=8)."
@@ -109,12 +112,17 @@ class SourceController(QObject):
 
                 self.driver = SourceDriver(self.client, unit_id=unit_id)
 
+
                 # Быстрый ping (ничего не записывает в прибор)
-                if not self.driver.ping():
-                    raise RuntimeError(
-                        f"Порт {port} открыт, но устройство (unit={unit_id}) не отвечает. "
-                        f"Проверьте линию/параметры (baud={baudrate}, parity={parity}, stop={stopbits}, data=8)."
-                    )
+                try:
+                    if not self.driver.ping():
+                        self.client.close()
+                        raise RuntimeError(
+                            f"Порт {port} открыт, но устройство (unit={unit_id}) не отвечает. Соединение остановлено."
+                        )
+                except Exception as e:
+                    self.client.close()
+                    raise RuntimeError(f"Ошибка при попытке связи: {e}")
 
             else:
                 # ---- TCP ----

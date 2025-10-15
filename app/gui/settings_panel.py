@@ -231,16 +231,10 @@ class SettingsPanel(QWidget):
 
         self.stub_btn.clicked.connect(_toggle_fullscreen)
 
-        # back_btn = QPushButton(SETTINGS_SCREEN["back_btn"])
-        # back_btn.setStyleSheet(BTN_STYLE)
-        # back_btn.setMinimumHeight(34)
-        # back_btn.clicked.connect(self.on_back)
-
         btns.addWidget(self.save_btn)
         btns.addWidget(self.connect_btn)
         btns.addWidget(self.stub_btn)
         btns.addStretch()
-        # btns.addWidget(back_btn)
         v.addLayout(btns)
 
         center_row.addWidget(self.card)

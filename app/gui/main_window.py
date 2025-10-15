@@ -240,20 +240,7 @@ class MainWindow(QMainWindow):
         self.lbl_home_hint.setAlignment(Qt.AlignCenter)
         self.lbl_home_hint.setStyleSheet("font-size: 18px; color: #fff;")
         v.addWidget(self.lbl_home_hint)
-        # --- Ток с кнопками + и - ---
-        self.lbl_current = QLabel("0 А")
-        self.lbl_current.setAlignment(Qt.AlignCenter)
-        self.lbl_current_dup = QLabel("0 А")
-        current_layout = self._create_adjustable_value_layout(
-            label=self.lbl_current,
-            label_style=f"color:{ACCENT}; font-size:160px; font-weight:800;",
-            duplicate_label=self.lbl_current_dup,
-            duplicate_style="font-size: 70px; color: #aaa;",
-            on_adjust=self._adjust_current,
-            type="current"
-        )
-        v.addLayout(current_layout)
-        v.addStretch()
+
 
         # --- Напряжение с кнопками + и - ---
         self.lbl_voltage = QLabel("0,0 В")
@@ -270,6 +257,21 @@ class MainWindow(QMainWindow):
         )
         v.addStretch()
         v.addLayout(voltage_layout)
+
+        # --- Ток с кнопками + и - ---
+        self.lbl_current = QLabel("0 А")
+        self.lbl_current.setAlignment(Qt.AlignCenter)
+        self.lbl_current_dup = QLabel("0 А")
+        current_layout = self._create_adjustable_value_layout(
+            label=self.lbl_current,
+            label_style=f"color:{ACCENT}; font-size:160px; font-weight:800;",
+            duplicate_label=self.lbl_current_dup,
+            duplicate_style="font-size: 70px; color: #aaa;",
+            on_adjust=self._adjust_current,
+            type="current"
+        )
+        v.addLayout(current_layout)
+        v.addStretch()
 
         self.source_header_home = SourceHeaderWidget(source_controller=self.source, main=self)
         v.addWidget(self.source_header_home)
@@ -370,10 +372,11 @@ class MainWindow(QMainWindow):
                 on_adjust(step * direction)
 
             def on_pressed():
+                print(direction)
                 nonlocal pressed_at
                 pressed_at = time.time()
                 # Первое изменение — сразу
-                on_adjust(10 if type == "current" else 1 * direction)
+                on_adjust(1 * direction)
                 repeat_timer.timeout.connect(on_timeout)
                 repeat_timer.start(300)  # первая задержка 300 мс
 
@@ -413,6 +416,7 @@ class MainWindow(QMainWindow):
         return main_layout
 
     def _adjust_voltage(self, delta: int):
+        print(f"delta voltage: {delta}")
         if not hasattr(self.source, 'driver') or not self.source.driver or self.lock:
             return
         try:
@@ -438,7 +442,7 @@ class MainWindow(QMainWindow):
             success = self.source.driver.write_current_register(new_raw_value)
             if success:
                 scaled_new = new_raw_value * 0.1
-                self.lbl_current_dup.setText(f"{int(scaled_new)} А".replace(".", ","))
+                self.lbl_current_dup.setText(f"{scaled_new:+.1f} А".replace(".", "").replace("+", ""))
         except Exception as e:
             print(f"Ошибка при изменении тока: {e}")
 
@@ -550,8 +554,8 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'settings_screen') and hasattr(self.settings_screen, 'update_from_meas'):
                 self.settings_screen.update_from_meas(meas)
             v = float(meas.voltage)
-            i = int(meas.current)
-            i_i = int(meas.current_i) / 10
+            i = float(meas.current)
+            i_i = float(meas.current_i) / 10
             v_i = float(meas.voltage_i) / 10
 
             polarity = meas.polarity
@@ -565,14 +569,14 @@ class MainWindow(QMainWindow):
 
 
             self.lbl_current.setText(
-                f'<font color="{color_i}">{polarity_t}{int(i)} A</font>'.replace("+", "").replace(".", ",")
+                f'<font color="{color_i}">{polarity_t}{i:+.1f} A</font>'.replace("+", "").replace(".", "")
             )
             self.lbl_voltage.setText(
                 f'<font color="{color_v}">{polarity_t}{v:+.1f} B</font>'.replace("+", "").replace(".", ",")
             )
 
             self.lbl_voltage_dup.setText(f"{v_i:+.1f} В".replace("+", "").replace(".", ","))
-            self.lbl_current_dup.setText(f"{int(i_i)} А")
+            self.lbl_current_dup.setText(f"{i_i:+.1f} А".replace("+", "").replace(".", ""))
 
             self.lbl_ah.setText(f"{int(meas.ah_counter)} А·ч")
 

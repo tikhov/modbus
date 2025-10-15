@@ -28,8 +28,8 @@ class SourceTableWidget(QWidget):
 
         # Заголовки
         headers = [
-            "Наименование источника (ID)",
-            "Номер источника",
+            "Наименование источника",
+            "Номер источника (ID)",
             "Ток уставки, А",
             "Напряжение уставки, В",
             "Измеряемый ток, А",
@@ -102,17 +102,17 @@ class SourceTableWidget(QWidget):
             polarity = self._meas.polarity
 
             v_Text = f"{v:+.1f}".replace("+", "").replace(".", ",")
-            i_Text = f"{i:.1f}".replace(".", ",")
+            i_Text = f"{i:.1f}".replace(".", "")
 
-            i_i_Text = f"{v_i:+.1f}".replace("+", "").replace(".", ",")
-            v_i_Text = f"{i_i:.1f}".replace(".", ",")
+            i_i_Text = f"{i_i:+.1f}".replace("+", "").replace(".", "")
+            v_i_Text = f"{v_i:.1f}".replace(".", ",")
 
             if polarity == 1:
                 i_Text = f"-{i_Text}"
                 v_Text = f"-{v_Text}"
 
 
-            return [["ИПГ 12/5000-380", "1", i_i_Text, v_i_Text, i_Text, v_Text, ah_counter]]
+            return [["ИПГ 12/5000-380", "10-25-0001", i_i_Text, v_i_Text, i_Text, v_Text, ah_counter]]
         except Exception as e:
             return [["Ошибка", "-", "-", "-", "-", "-", "-"]]
 
