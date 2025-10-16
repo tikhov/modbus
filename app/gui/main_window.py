@@ -372,7 +372,6 @@ class MainWindow(QMainWindow):
                 on_adjust(step * direction)
 
             def on_pressed():
-                print(direction)
                 nonlocal pressed_at
                 pressed_at = time.time()
                 # Первое изменение — сразу
@@ -416,7 +415,6 @@ class MainWindow(QMainWindow):
         return main_layout
 
     def _adjust_voltage(self, delta: int):
-        print(f"delta voltage: {delta}")
         if not hasattr(self.source, 'driver') or not self.source.driver or self.lock:
             return
         try:

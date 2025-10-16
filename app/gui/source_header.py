@@ -12,7 +12,7 @@ class SourceHeaderWidget(QWidget):
         super().__init__(parent)
         self.source = source_controller  # ← принимаем контроллер
         self._setup_ui()
-        self.set_source_name("ИПГ 12/5000-380 IP65 09-25-3007")
+        self.set_source_name("ИПГ 12/5000-380 IP65 10-25-0001")
         self.main = main
 
     def _setup_ui(self):

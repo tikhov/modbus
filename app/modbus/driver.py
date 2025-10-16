@@ -270,6 +270,8 @@ class SourceDriver:
     def write_voltage_register(self, value: int) -> bool:
         if value > 120:
             value = 120
+        if value < 1:
+            value = 1
         rr = self._write_register(holding_reg(HoldingRegs.VOLTAGE_SETPOINT), int(value))
         success = (rr is not None) and (not getattr(rr, 'isError', lambda: False)())
         if not success:
@@ -287,8 +289,10 @@ class SourceDriver:
         return None
 
     def write_current_register(self, value: int) -> bool:
-        if value > 50000:
-            value = 50000
+        if value > 5000:
+            value = 5000
+        if value < 1:
+            value = 1
         rr = self._write_register(holding_reg(HoldingRegs.CURRENT_SETPOINT), int(value))
         success = (rr is not None) and (not getattr(rr, 'isError', lambda: False)())
         if not success:
